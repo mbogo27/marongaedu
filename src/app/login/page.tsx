@@ -97,6 +97,9 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-400"
               />
+              <p className="mt-1.5 text-xs text-gold-600">
+                Demo tip: this is a stub — type anything in both fields and click {mode === "login" ? "Log in" : "Create account"}.
+              </p>
             </div>
             <button
               type="submit"

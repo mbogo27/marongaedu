@@ -26,6 +26,9 @@ export default function SiteHeader() {
           <Link href="/#contact" className="hover:text-teal-700">
             Contact
           </Link>
+          <Link href="/admin/login" className="hover:text-teal-700">
+            Admin login
+          </Link>
         </nav>
 
         <div className="flex items-center gap-3">

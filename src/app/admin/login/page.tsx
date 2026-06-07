@@ -57,6 +57,9 @@ export default function AdminLoginPage() {
               placeholder="••••••••"
               className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-400"
             />
+            <p className="mt-1.5 text-xs text-gold-600">
+              Demo tip: this is a stub — type anything and click &ldquo;Log in to back office&rdquo;.
+            </p>
           </div>
           <button
             type="submit"
