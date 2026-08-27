@@ -1,74 +1,66 @@
 @AGENTS.md
 
-# Maronga — Dental E-Learning Demo
+# Maronga — Dental E-Learning Platform (v2)
 
-**What this is:** A clickable sales-demo build of `spec.md` — a Dental
-E-Learning platform for **Dr. Godfrey Maronga** ("Maronga Dental Academy").
-Not production: stubbed auth, payments, and persistence throughout. Built
-to let the client click through and feel the product before committing.
+**What this is:** A full-stack build of `spec-2.md` — a dental
+e-learning e-commerce platform for **Dr. Godfrey Maronga** ("Maronga
+Dental Academy"). Real accounts, real (local) persistence, real learner
+progress/certificates, full admin back-office. **Payments, email/SMS,
+and Google OAuth are simulated stubs** per spec §6/§8 — everything else
+is real.
 
-Stack: Next.js 16 (App Router, TypeScript, Turbopack), Tailwind CSS v4.
-No database — all content lives in `src/lib/data.ts`.
+> v1 — the earlier no-backend marketing demo built from `spec.md` — is
+> preserved at git tag `v1-marketing-demo` / branch `main`. This work
+> lives on branch `v2-ecommerce` and has not been merged/deployed; `main`
+> still serves v1 on Vercel. See README.md for the full setup/demo-creds/
+> acceptance-walkthrough writeup — this file covers conventions an agent
+> needs before editing.
+
+Stack: Next.js 16 (App Router, Turbopack, TypeScript), Tailwind CSS v4,
+Prisma 7 + SQLite (driver-adapter model), custom session auth, TipTap,
+`@dnd-kit`, Recharts, `pdf-lib`.
 
 ## Decisions already made (don't re-ask)
 
-These resolve spec.md §7's open questions — answered by the client:
+Carried over from v1, still true:
+- **Instructor**: Dr. Godfrey Maronga, solo instructor
+- **Market**: Kenya — KES pricing (`formatKes()` in `src/lib/format.ts`), USD toggle is display-only (hard-coded rate in `Setting` table, editable in `/admin/settings`)
+- **Brand**: deep teal (`--teal-*`) + gold accent (`--gold-*`) on warm off-white (`--paper`), serif headings (Lora) + sans body (Inter) — unchanged from v1, defined in `src/app/globals.css`
 
-- **Instructor**: Dr. Godfrey Maronga, solo instructor (no guest lecturers for now)
-- **Market**: Kenya — all prices shown in **KES** (`formatKes()` in `src/lib/data.ts`)
-- **Pricing model**: flat one-time price per course (no bundles/subscriptions/CDP-CME)
-- **Brand direction** (proposed by Claude, not yet client-confirmed): deep
-  teal (`--teal-*`) + warm gold accent (`--gold-*`) on warm off-white
-  (`--paper`), serif headings (Lora) + sans body (Inter), real photography
-  over illustration, YouTube embeds for preview video
-- **Brand assets**: client supplied a real headshot — `public/maronga.jpg`
-  (also duplicated at repo root `maronga.jpg`), wired in via
-  `instructor.photoUrl` in `src/lib/data.ts`. Course thumbnails / hero /
-  other imagery still use Lorem Picsum seeded placeholders
-  (`https://picsum.photos/seed/<seed>/...`) — swap for real photography
-  before client launch.
-- Preview video uses ONE shared placeholder YouTube ID
-  (`PLACEHOLDER_VIDEO_ID` in `src/lib/data.ts`, currently Big Buck Bunny) —
-  swap to Maronga's real footage later, single edit point.
+New for v2:
+- **DB**: SQLite via Prisma 7's driver-adapter model (`@prisma/adapter-better-sqlite3`). `datasource` blocks in `schema.prisma` no longer take a `url` — connection config lives in `prisma.config.ts` (CLI) and is wired into the adapter in `src/lib/db.ts` (runtime). `DATABASE_URL` is resolved relative to `process.cwd()`, not the schema file's directory.
+- **Auth**: no NextAuth/Auth.js. Custom, per Next.js's own documented pattern (`node_modules/next/dist/docs/01-app/02-guides/authentication.md`): bcrypt + `jose`-signed httpOnly cookie + DB `Session` table, `src/lib/dal.ts` (`server-only`, `verifySession()`/`requireUser()`/`requireAdmin()`) is the real authorization boundary. `proxy.ts` (Next 16 renamed `middleware.ts` → `proxy.ts`) only does cheap optimistic redirects — never trust it alone.
+- **Video**: no more YouTube iframe embeds. Lessons play a real HTML5 `<video>` (speed/captions/PiP/fullscreen/resume-position — spec requires this and an iframe can't do it). `public/videos/placeholder-*.mp4` + `public/captions/placeholder-*.vtt` are a locally-generated (ffmpeg, offline, no download needed) pool of 10 clips; `scripts/generate-placeholder-videos.mjs` regenerates them.
+- **"Rich text"** fields (course description, reading lessons) are stored as sanitized HTML strings, not TipTap JSON — TipTap is purely the editing UI (`editor.getHTML()` in, `dangerouslySetInnerHTML` out). Simplifies storage/rendering at no functional cost.
+- **Course editor save model**: the whole editor (basics/media/curriculum/pricing/seo/settings tabs) is one client form; Save Draft/Publish submits everything together via `saveCourseAction` (`src/lib/actions/admin/courses.ts`), which replaces a course's outcomes/requirements/audience/modules/lessons/quiz in one transaction. No per-field autosave in the curriculum builder — reorders/edits are local React state until Save.
 
 ## Structure / where things live
 
-- `src/lib/types.ts` — Course, Module, Lesson, Testimonial, Student types
-- `src/lib/data.ts` — ALL mock content: instructor bio, 6 courses (with
-  full curricula/modules/lessons/outcomes/descriptions), testimonials,
-  students, admin dashboard stats, `formatKes()`, `getCourseBySlug()`
-- `src/components/` — shared UI: SiteHeader, SiteFooter, CourseCard,
-  LevelBadge, VideoPlayer (poster→YouTube embed on click), CurriculumAccordion,
-  EnrollButton (modal: order summary → processing → success), NewsletterForm
-- `src/components/admin/` — AdminShell (sidebar layout), CourseEditorForm
-  (curriculum builder: add/remove modules & lessons, toast on save)
-
-## Routes built (all pass `next build` static generation)
-
-Learner: `/` `/courses/[slug]` `/login` `/dashboard` (reads `?course=slug`
-to show "enrolled" state with fake progress)
-
-Admin: `/admin/login` `/admin` `/admin/courses` `/admin/courses/[slug]`
-(also `/admin/courses/new`) `/admin/students`
-
-## Auth (intentionally stubbed per spec §2.3/§3)
-
-Both `/login` and `/admin/login` accept ANY email/password and route to
-their dashboards after a fake delay — no real backend. Admin login email
-field is pre-filled with `dr.maronga@marongadental.ac.ke`.
+- `prisma/schema.prisma` — full data model (~20 models: users, courses, modules, lessons w/ JSON `content` per type, quiz questions/options, enrollments, lesson progress, notes, reviews, payments, coupons, certificates, settings, ...). `Lesson.content` and other free-form fields are JSON `String`s, parsed via `src/lib/content-types.ts` (`parseLessonContent<T>()`), not Prisma `Json` columns — sidesteps SQLite `Json`-type quirks.
+- `prisma/seed.ts` + `prisma/seed-data.ts` — full spec §10 demo dataset. Re-run with `npm run db:seed` (destructive — clears and repopulates).
+- `src/lib/dal.ts`, `src/lib/session.ts`, `proxy.ts` — auth (see above)
+- `src/lib/queries.ts`, `src/lib/admin-queries.ts` — read-side helpers (course listing/filtering/sorting, course detail, admin dashboard aggregates)
+- `src/lib/actions/*.ts` — learner-facing server actions (auth, courses/enroll/wishlist/reviews, checkout, learn/progress/quiz/notes, account)
+- `src/lib/actions/admin/*.ts` — admin server actions, one file per back-office section
+- `src/lib/payments.ts` — the M-Pesa/Card stub simulation rules (phone/card suffix → outcome), Luhn/expiry validation
+- `src/lib/storage.ts` — local-disk upload stub (`public/uploads/runtime/`) behind an interface a real object store can drop into
+- `src/lib/pdf.ts` — certificate + invoice PDF generation (`pdf-lib`)
+- `src/components/learn/*` — the `/learn/[slug]` experience (sidebar, per-lesson-type panes, notes, quiz)
+- `src/components/admin/*` — course editor (`CourseEditorForm` + `CurriculumBuilder` + `RichTextEditor`), category/coupon modals, charts
+- `src/app/admin/(protected)/**` — all admin pages, guarded by `layout.tsx` calling `requireAdmin()`. `/admin/login` sits outside the route group (unprotected, obviously). **Route Handlers under `(protected)` are NOT covered by the layout** (layouts don't wrap `route.ts`) — each one (`enrollments/export`, `certificates/[id]/download`, `invoices/[paymentId]`) calls `requireAdmin()`/`getCurrentUser()` itself.
 
 ## Known quirks / things to revisit
 
-- `next.config.ts` whitelists `picsum.photos` and `i.ytimg.com` as remote
-  image hosts — update this list when swapping in real asset hosts.
-- Enrollment flow passes the enrolled course via the `?course=` query
-  param (no localStorage/session) — deliberate simplification for a demo.
-- Don't use `sm:h-auto` (or any breakpoint that drops height) on a
-  `relative` parent of a Next `<Image fill>` — collapses to zero height
-  and the image silently disappears. Hit this once on the dashboard card;
-  fixed by giving it a fixed height at every breakpoint.
+- A Client Component (`"use client"` file) must never directly import and render a Server Component that touches the DB (e.g. `<SiteHeader />`) — Next.js would try to bundle `better-sqlite3` for the browser and the build breaks with `Module not found: Can't resolve 'fs'`. Split into a server `page.tsx` (renders `SiteHeader`/`SiteFooter`) + a client subcomponent for the interactive form. Hit this on `/forgot-password` and `/reset-password`; fixed by extracting `ForgotPasswordForm`/`ResetPasswordForm`.
+- `SiteFooter` (rendered on nearly every page) contains `NewsletterForm`, which has its own `<form>` and an `input[name="email"]` — any page with the footer has *two* `name="email"` inputs and *three* `<form>` elements on it. Scope selectors/tests accordingly.
+- Prisma 7 dropped `skipDuplicates` support for SQLite `createMany` (already unsupported pre-7 too) — omit it, don't pass `skipDuplicates: true`.
+- Don't use `sm:h-auto` (or any breakpoint that drops height) on a `relative` parent of a Next `<Image fill>` — collapses to zero height. (Carried over from v1; still applies.)
+- `RouteContext<'/path/[param]'>` is the Next 16 typed-routes helper for typing a Route Handler's `context.params` — generated at dev/build time, available globally without an import.
 
 ## Deployment
 
-Deployed via GitHub (`mbogo27/marongaedu`) → Vercel. See chat history /
-ask the user for the live URL once deployed.
+v1 is deployed via GitHub (`mbogo27/marongaedu`) → Vercel on `main`. v2
+(`v2-ecommerce` branch) has not been merged or deployed. SQLite-on-disk
+needs a persistent volume or hosted SQLite (Turso, etc.) to survive
+Vercel's ephemeral filesystem across deploys — see README.md's
+Deployment section before merging/shipping v2.

@@ -13,7 +13,11 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Maronga | Authoritative Dental Education",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
+  title: {
+    default: "Maronga | Authoritative Dental Education",
+    template: "%s | Maronga Dental Academy",
+  },
   description:
     "Practical, practitioner-led dental courses from Dr. Maronga — built for students and clinicians across Kenya.",
 };

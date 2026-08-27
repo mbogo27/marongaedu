@@ -81,7 +81,6 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ s
   return (
     <>
       <SiteHeader />
-      {/* eslint-disable-next-line react/no-danger */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <main className="flex-1">
         <section className="border-b border-teal-100 bg-teal-50/40">

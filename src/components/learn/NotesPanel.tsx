@@ -24,7 +24,6 @@ export default function NotesPanel({
   useEffect(() => {
     if (timeout.current) clearTimeout(timeout.current);
     if (content === initialContent) return;
-    setSaved(false);
     timeout.current = setTimeout(async () => {
       await saveNoteAction(lessonId, content);
       setSaved(true);
@@ -34,6 +33,12 @@ export default function NotesPanel({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content]);
+
+  function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const value = e.target.value;
+    setContent(value);
+    setSaved(value === initialContent);
+  }
 
   async function addTimestampNote() {
     const seconds = getVideoTime ? Math.floor(getVideoTime()) : 0;
@@ -55,7 +60,7 @@ export default function NotesPanel({
       </div>
       <textarea
         value={content}
-        onChange={(e) => setContent(e.target.value)}
+        onChange={handleChange}
         rows={4}
         placeholder="Take notes on this lesson..."
         className="mt-3 w-full rounded-xl border border-teal-100 px-3 py-2 text-sm focus:border-teal-400 focus:outline-none"
