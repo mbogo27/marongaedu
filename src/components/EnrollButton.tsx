@@ -1,126 +1,74 @@
-"use client";
-
-import { useState } from "react";
 import Link from "next/link";
-import { formatKes } from "@/lib/data";
-
-type Step = "summary" | "processing" | "success";
+import { formatKes } from "@/lib/format";
+import { enrollAction, toggleWishlistAction } from "@/lib/actions/courses";
 
 export default function EnrollButton({
   slug,
+  courseId,
   title,
   priceKes,
+  effectivePriceKes,
+  isFree,
+  isEnrolled,
+  isWishlisted,
   className,
 }: {
   slug: string;
+  courseId: string;
   title: string;
   priceKes: number;
+  effectivePriceKes: number;
+  isFree: boolean;
+  isEnrolled: boolean;
+  isWishlisted?: boolean;
   className?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const [step, setStep] = useState<Step>("summary");
-
-  function reset() {
-    setOpen(false);
-    setTimeout(() => setStep("summary"), 200);
-  }
-
-  function pay() {
-    setStep("processing");
-    setTimeout(() => setStep("success"), 1100);
+  if (isEnrolled) {
+    return (
+      <Link
+        href={`/learn/${slug}`}
+        className={
+          className ??
+          "block rounded-full bg-teal-700 px-6 py-3 text-center text-sm font-semibold text-white shadow-md transition hover:bg-teal-800"
+        }
+      >
+        Go to course →
+      </Link>
+    );
   }
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className={
-          className ??
-          "rounded-full bg-gold-500 px-6 py-3 text-sm font-semibold text-teal-900 shadow-md transition hover:bg-gold-400"
-        }
-      >
-        Enroll now
-      </button>
-
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-teal-900/50 px-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            {step === "summary" && (
-              <>
-                <h3 className="font-serif text-xl text-teal-900">Order summary</h3>
-                <div className="mt-4 flex items-center justify-between rounded-xl border border-teal-100 bg-teal-50/60 p-4">
-                  <div>
-                    <p className="font-medium text-ink">{title}</p>
-                    <p className="text-sm text-ink/60">Full lifetime access</p>
-                  </div>
-                  <p className="font-serif text-lg text-teal-700">{formatKes(priceKes)}</p>
-                </div>
-                <div className="mt-4 flex items-center justify-between border-t border-teal-100 pt-4 text-sm">
-                  <span className="text-ink/60">Total due today</span>
-                  <span className="font-semibold text-ink">{formatKes(priceKes)}</span>
-                </div>
-                <p className="mt-3 text-xs text-ink/40">
-                  Demo checkout — no payment is processed. M-Pesa and card
-                  options would appear here in the live product.
-                </p>
-                <div className="mt-6 flex gap-3">
-                  <button
-                    type="button"
-                    onClick={reset}
-                    className="flex-1 rounded-full border border-teal-100 px-4 py-2.5 text-sm font-medium text-ink/70 hover:bg-teal-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={pay}
-                    className="flex-1 rounded-full bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700"
-                  >
-                    Pay {formatKes(priceKes)}
-                  </button>
-                </div>
-              </>
-            )}
-
-            {step === "processing" && (
-              <div className="flex flex-col items-center gap-4 py-10 text-center">
-                <span className="h-10 w-10 animate-spin rounded-full border-4 border-teal-100 border-t-teal-600" />
-                <p className="font-medium text-ink">Processing your payment…</p>
-                <p className="text-sm text-ink/50">This will only take a moment.</p>
-              </div>
-            )}
-
-            {step === "success" && (
-              <div className="flex flex-col items-center gap-3 py-6 text-center">
-                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-teal-50 text-teal-600">
-                  <svg viewBox="0 0 24 24" className="h-7 w-7 fill-current">
-                    <path d="M9 16.2l-3.5-3.5L4 14.2 9 19.2 20 8.2l-1.5-1.5z" />
-                  </svg>
-                </span>
-                <h3 className="font-serif text-xl text-teal-900">You&apos;re enrolled!</h3>
-                <p className="text-sm text-ink/60">
-                  {title} has been added to your dashboard. Jump in whenever
-                  you&apos;re ready.
-                </p>
-                <Link
-                  href={`/dashboard?course=${slug}`}
-                  className="mt-3 rounded-full bg-gold-500 px-6 py-2.5 text-sm font-semibold text-teal-900 shadow-sm transition hover:bg-gold-400"
-                >
-                  Start learning →
-                </Link>
-                <button
-                  type="button"
-                  onClick={reset}
-                  className="text-sm text-ink/40 hover:text-ink/60"
-                >
-                  Close
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </>
+    <div className="flex items-center gap-2">
+      <form action={enrollAction.bind(null, slug)} className="flex-1">
+        <button
+          type="submit"
+          className={
+            className ??
+            "w-full rounded-full bg-gold-500 px-6 py-3 text-sm font-semibold text-teal-900 shadow-md transition hover:bg-gold-400"
+          }
+        >
+          {isFree ? "Enroll free" : `Enroll now · ${formatKes(effectivePriceKes)}`}
+          {!isFree && effectivePriceKes < priceKes && (
+            <span className="ml-2 text-xs font-normal text-teal-900/60 line-through">{formatKes(priceKes)}</span>
+          )}
+        </button>
+      </form>
+      <form action={toggleWishlistAction.bind(null, courseId)}>
+        <button
+          type="submit"
+          aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+          title={title}
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition ${
+            isWishlisted
+              ? "border-gold-400 bg-gold-50 text-gold-600"
+              : "border-teal-100 text-teal-700 hover:bg-teal-50"
+          }`}
+        >
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill={isWishlisted ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2}>
+            <path d="M12 21s-7-4.5-9.5-9C.7 8.4 2.3 4.5 6 4.5c2 0 3.4 1.1 4 2.1.6-1 2-2.1 4-2.1 3.7 0 5.3 3.9 3.5 7.5-2.5 4.5-9.5 9-9.5 9z" />
+          </svg>
+        </button>
+      </form>
+    </div>
   );
 }

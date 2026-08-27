@@ -1,7 +1,7 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { db } from "../src/lib/db";
-import { categories, courses, testimonials, reviewsPool, type SeedCourse } from "./seed-data";
+import { categories, courses, reviewsPool, type SeedCourse } from "./seed-data";
 
 const DEMO_PASSWORD = "Demo@1234";
 const VIDEO_POOL_SIZE = 10;
@@ -476,8 +476,6 @@ async function main() {
       { type: "contact_submission", payload: JSON.stringify({ subject: "Group discount for our clinic" }), createdAt: daysAgo(2) },
     ],
   });
-
-  console.log("Testimonials available in-code (not DB-backed):", testimonials.length);
 
   console.log("Seed complete.");
   console.log(`Admin login: admin@demo.co.ke / ${DEMO_PASSWORD}`);

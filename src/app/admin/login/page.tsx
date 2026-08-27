@@ -1,19 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useActionState } from "react";
 import Link from "next/link";
+import { adminLoginAction, type AuthFormState } from "@/lib/actions/auth";
 
 export default function AdminLoginPage() {
-  const router = useRouter();
-  const [submitting, setSubmitting] = useState(false);
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
-    // Demo only — no real authentication. Any details are accepted.
-    setTimeout(() => router.push("/admin"), 600);
-  }
+  const [state, action, pending] = useActionState<AuthFormState, FormData>(adminLoginAction, undefined);
 
   return (
     <main className="flex flex-1 items-center justify-center bg-teal-900 px-6 py-16">
@@ -33,16 +25,17 @@ export default function AdminLoginPage() {
           Sign in to manage courses, see enrollments and review your students.
         </p>
 
-        <form className="mt-6 flex flex-col gap-4" onSubmit={handleSubmit}>
+        <form action={action} className="mt-6 flex flex-col gap-4">
           <div>
             <label htmlFor="admin-email" className="text-sm font-medium text-ink/70">
               Email address
             </label>
             <input
               id="admin-email"
+              name="email"
               type="email"
               required
-              defaultValue="dr.maronga@marongadental.ac.ke"
+              defaultValue="admin@demo.co.ke"
               className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-400"
             />
           </div>
@@ -52,27 +45,25 @@ export default function AdminLoginPage() {
             </label>
             <input
               id="admin-password"
+              name="password"
               type="password"
               required
               placeholder="••••••••"
               className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-400"
             />
-            <p className="mt-1.5 text-xs text-gold-600">
-              Demo tip: this is a stub — type anything and click &ldquo;Log in to back office&rdquo;.
-            </p>
+            <p className="mt-1.5 text-xs text-gold-600">Demo password: Demo@1234</p>
           </div>
+          {state?.error && <p className="text-sm text-red-600">{state.error}</p>}
           <button
             type="submit"
-            disabled={submitting}
+            disabled={pending}
             className="mt-2 rounded-full bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-60"
           >
-            {submitting ? "Signing you in…" : "Log in to back office"}
+            {pending ? "Signing you in…" : "Log in to back office"}
           </button>
         </form>
 
         <p className="mt-6 text-center text-xs text-ink/40">
-          Demo build — this is a stub. Any email and password will sign you
-          in.{" "}
           <Link href="/login" className="text-teal-600 hover:underline">
             Looking for the learner sign-in?
           </Link>
