@@ -40,5 +40,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# database (regenerate via `npm run db:seed`)
+/prisma/dev.db
+/prisma/dev.db-journal
+
+# user-uploaded files at runtime (seed/demo assets in public/videos, public/uploads/seed stay committed)
+/public/uploads/runtime/
+
 # Claude Code local settings (machine-specific)
 .claude/settings.local.json
