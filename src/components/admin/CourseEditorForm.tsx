@@ -1,297 +1,308 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
+import Link from "next/link";
 import Image from "next/image";
-import type { Course, Level, Module } from "@/lib/types";
+import { saveCourseAction, type SaveState } from "@/lib/actions/admin/courses";
+import DynamicListEditor from "./DynamicListEditor";
+import RichTextEditor from "./RichTextEditor";
+import CurriculumBuilder, { type EditableModule } from "./CurriculumBuilder";
 
-const levels: Level[] = ["Beginner", "Intermediate", "Advanced", "All levels"];
+const TABS = ["basics", "media", "curriculum", "pricing", "seo", "settings"] as const;
+type Tab = (typeof TABS)[number];
 
-let moduleSeq = 0;
-let lessonSeq = 0;
-function nextModuleId() {
-  moduleSeq += 1;
-  return `new-module-${moduleSeq}`;
-}
-function nextLessonId() {
-  lessonSeq += 1;
-  return `new-lesson-${lessonSeq}`;
-}
+export type EditorCourse = {
+  id: string;
+  title: string;
+  slug: string;
+  subtitle: string | null;
+  categoryId: string;
+  level: string;
+  language: string;
+  priceKes: number;
+  salePriceKes: number | null;
+  saleEndsAt: string | null;
+  isFree: boolean;
+  shortDescription: string;
+  description: string;
+  thumbnailUrl: string;
+  previewVideoUrl: string;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  ogImageUrl: string | null;
+  isFeatured: boolean;
+  enrollmentCap: number | null;
+  enrollmentOpensAt: string | null;
+  enrollmentClosesAt: string | null;
+  status: string;
+  outcomes: string[];
+  requirements: string[];
+  audience: string[];
+  modules: EditableModule[];
+};
 
-type EditableLesson = { id: string; title: string; minutes: number };
-type EditableModule = { id: string; title: string; lessons: EditableLesson[] };
+export default function CourseEditorForm({
+  course,
+  categories,
+}: {
+  course?: EditorCourse;
+  categories: { id: string; name: string }[];
+}) {
+  const boundAction = saveCourseAction.bind(null, course?.id ?? null);
+  const [state, action, pending] = useActionState<SaveState, FormData>(boundAction, undefined);
 
-function toEditable(modules: Module[]): EditableModule[] {
-  return modules.map((m) => ({
-    id: nextModuleId(),
-    title: m.title,
-    lessons: m.lessons.map((l) => ({ id: nextLessonId(), title: l.title, minutes: l.minutes })),
-  }));
-}
-
-export default function CourseEditorForm({ course }: { course?: Course }) {
+  const [tab, setTab] = useState<Tab>("basics");
   const [title, setTitle] = useState(course?.title ?? "");
-  const [description, setDescription] = useState(course?.description.join("\n\n") ?? "");
-  const [price, setPrice] = useState(course?.priceKes.toString() ?? "");
-  const [level, setLevel] = useState<Level>(course?.level ?? "Beginner");
-  const [thumbName, setThumbName] = useState<string | null>(null);
-  const [modules, setModules] = useState<EditableModule[]>(
-    course ? toEditable(course.modules) : []
-  );
-  const [toast, setToast] = useState<string | null>(null);
-
-  function showToast(message: string) {
-    setToast(message);
-    setTimeout(() => setToast(null), 2400);
-  }
-
-  function addModule() {
-    setModules((prev) => [...prev, { id: nextModuleId(), title: `Module ${prev.length + 1} — Untitled`, lessons: [] }]);
-  }
-  function removeModule(id: string) {
-    setModules((prev) => prev.filter((m) => m.id !== id));
-  }
-  function renameModule(id: string, value: string) {
-    setModules((prev) => prev.map((m) => (m.id === id ? { ...m, title: value } : m)));
-  }
-  function addLesson(moduleId: string) {
-    setModules((prev) =>
-      prev.map((m) =>
-        m.id === moduleId
-          ? { ...m, lessons: [...m.lessons, { id: nextLessonId(), title: "New lesson", minutes: 10 }] }
-          : m
-      )
-    );
-  }
-  function removeLesson(moduleId: string, lessonId: string) {
-    setModules((prev) =>
-      prev.map((m) =>
-        m.id === moduleId ? { ...m, lessons: m.lessons.filter((l) => l.id !== lessonId) } : m
-      )
-    );
-  }
-  function renameLesson(moduleId: string, lessonId: string, value: string) {
-    setModules((prev) =>
-      prev.map((m) =>
-        m.id === moduleId
-          ? { ...m, lessons: m.lessons.map((l) => (l.id === lessonId ? { ...l, title: value } : l)) }
-          : m
-      )
-    );
-  }
-  function setLessonMinutes(moduleId: string, lessonId: string, minutes: number) {
-    setModules((prev) =>
-      prev.map((m) =>
-        m.id === moduleId
-          ? { ...m, lessons: m.lessons.map((l) => (l.id === lessonId ? { ...l, minutes } : l)) }
-          : m
-      )
-    );
-  }
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    showToast(course ? "Course saved." : "Course created as a draft.");
-  }
+  const [slug, setSlug] = useState(course?.slug ?? "");
+  const [isFree, setIsFree] = useState(course?.isFree ?? false);
+  const [thumbnailUrl, setThumbnailUrl] = useState(course?.thumbnailUrl ?? "");
+  const [descriptionHtml, setDescriptionHtml] = useState(course?.description ?? "<p></p>");
+  const [outcomes, setOutcomes] = useState<string[]>(course?.outcomes ?? []);
+  const [requirements, setRequirements] = useState<string[]>(course?.requirements ?? []);
+  const [audience, setAudience] = useState<string[]>(course?.audience ?? []);
+  const [modules, setModules] = useState<EditableModule[]>(course?.modules ?? []);
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-8">
-      <div className="grid gap-6 rounded-2xl border border-teal-100 bg-white p-6 shadow-sm lg:grid-cols-[1fr_240px]">
-        <div className="flex flex-col gap-5">
-          <div>
-            <label htmlFor="course-title" className="text-sm font-medium text-ink/70">
-              Title
-            </label>
-            <input
-              id="course-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Endodontic Fundamentals: Diagnosis to Obturation"
-              className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-400"
-            />
-          </div>
+    <form action={action} className="flex flex-col gap-6">
+      <input type="hidden" name="outcomesJson" value={JSON.stringify(outcomes)} readOnly />
+      <input type="hidden" name="requirementsJson" value={JSON.stringify(requirements)} readOnly />
+      <input type="hidden" name="audienceJson" value={JSON.stringify(audience)} readOnly />
+      <input type="hidden" name="curriculumJson" value={JSON.stringify(modules)} readOnly />
+      <input type="hidden" name="descriptionHtml" value={descriptionHtml} readOnly />
 
-          <div>
-            <label htmlFor="course-description" className="text-sm font-medium text-ink/70">
-              Description
-            </label>
-            <textarea
-              id="course-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={5}
-              placeholder="What will students learn, and why should they trust you to teach it?"
-              className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-400"
-            />
-          </div>
+      <div className="flex items-center justify-between">
+        <div>
+          <Link href="/admin/courses" className="text-sm text-teal-700 hover:underline">
+            ← All courses
+          </Link>
+          <h1 className="mt-1 font-serif text-2xl text-teal-900">{course ? "Edit course" : "New course"}</h1>
+        </div>
+        {course && (
+          <Link href={`/courses/${course.slug}`} target="_blank" className="rounded-full border border-teal-100 px-4 py-2 text-sm font-medium text-teal-700 hover:bg-teal-50">
+            Preview live page →
+          </Link>
+        )}
+      </div>
 
+      <nav className="flex gap-1 overflow-x-auto rounded-full bg-teal-50 p-1 text-sm font-medium">
+        {TABS.map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={`shrink-0 rounded-full px-4 py-2 capitalize transition ${tab === t ? "bg-white text-teal-700 shadow-sm" : "text-ink/60"}`}
+          >
+            {t}
+          </button>
+        ))}
+      </nav>
+
+      <div className={tab === "basics" ? "" : "hidden"}>
+        <div className="space-y-5 rounded-2xl border border-teal-100 bg-white p-6">
           <div className="grid gap-5 sm:grid-cols-2">
             <div>
-              <label htmlFor="course-price" className="text-sm font-medium text-ink/70">
-                Price (KES)
-              </label>
-              <div className="mt-1 flex items-center rounded-lg border border-teal-100 focus-within:border-teal-400 focus-within:ring-1 focus-within:ring-teal-400">
-                <span className="pl-4 text-sm text-ink/40">KSh</span>
-                <input
-                  id="course-price"
-                  type="number"
-                  min={0}
-                  step={50}
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  placeholder="6000"
-                  className="w-full rounded-lg px-2 py-2.5 text-sm focus:outline-none"
-                />
-              </div>
-              <p className="mt-1 text-xs text-ink/40">Flat one-time price per course.</p>
+              <label className="text-sm font-medium text-ink/70">Title</label>
+              <input
+                name="title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+                className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none"
+              />
             </div>
             <div>
-              <label htmlFor="course-level" className="text-sm font-medium text-ink/70">
-                Level
-              </label>
-              <select
-                id="course-level"
-                value={level}
-                onChange={(e) => setLevel(e.target.value as Level)}
-                className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-400"
-              >
-                {levels.map((l) => (
-                  <option key={l} value={l}>
-                    {l}
+              <label className="text-sm font-medium text-ink/70">Slug</label>
+              <input
+                name="slug"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                placeholder="auto-generated from title if left blank"
+                className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink/70">Subtitle</label>
+            <input name="subtitle" defaultValue={course?.subtitle ?? ""} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+          </div>
+          <div className="grid gap-5 sm:grid-cols-3">
+            <div>
+              <label className="text-sm font-medium text-ink/70">Category</label>
+              <select name="categoryId" defaultValue={course?.categoryId} required className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none">
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
                   </option>
                 ))}
               </select>
             </div>
-          </div>
-        </div>
-
-        <div>
-          <p className="text-sm font-medium text-ink/70">Thumbnail</p>
-          <div className="relative mt-1 aspect-video w-full overflow-hidden rounded-xl border border-teal-100 bg-teal-50">
-            <Image
-              src={`https://picsum.photos/seed/${course?.thumbnailSeed ?? "maronga-new-course"}/480/320`}
-              alt=""
-              fill
-              className="object-cover"
-            />
-          </div>
-          <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-teal-200 px-4 py-2.5 text-sm font-medium text-teal-700 hover:bg-teal-50">
-            <input
-              type="file"
-              accept="image/*"
-              className="sr-only"
-              onChange={(e) => setThumbName(e.target.files?.[0]?.name ?? null)}
-            />
-            {thumbName ? `Selected: ${thumbName}` : "Upload new thumbnail"}
-          </label>
-          <p className="mt-1 text-xs text-ink/40">
-            Demo only — uploads aren&apos;t stored. JPG or PNG, 16:10 recommended.
-          </p>
-        </div>
-      </div>
-
-      {/* Curriculum builder */}
-      <div className="rounded-2xl border border-teal-100 bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-serif text-lg text-teal-900">Curriculum builder</h2>
-            <p className="text-sm text-ink/50">Add modules, then add lessons underneath each one.</p>
-          </div>
-          <button
-            type="button"
-            onClick={addModule}
-            className="rounded-full border border-teal-200 px-4 py-2 text-sm font-medium text-teal-700 transition hover:bg-teal-50"
-          >
-            + Add module
-          </button>
-        </div>
-
-        <div className="mt-5 flex flex-col gap-4">
-          {modules.length === 0 && (
-            <p className="rounded-xl border border-dashed border-teal-200 px-4 py-8 text-center text-sm text-ink/50">
-              No modules yet — add one to start building the curriculum.
-            </p>
-          )}
-          {modules.map((mod, mi) => (
-            <div key={mod.id} className="rounded-xl border border-teal-100 bg-teal-50/40 p-4">
-              <div className="flex items-center gap-3">
-                <span className="shrink-0 text-xs font-medium text-ink/40">#{mi + 1}</span>
-                <input
-                  value={mod.title}
-                  onChange={(e) => renameModule(mod.id, e.target.value)}
-                  className="flex-1 rounded-lg border border-teal-100 bg-white px-3 py-2 text-sm font-medium focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-400"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeModule(mod.id)}
-                  className="shrink-0 rounded-lg px-3 py-2 text-xs font-medium text-red-500 hover:bg-red-50"
-                >
-                  Remove module
-                </button>
-              </div>
-
-              <ul className="mt-3 flex flex-col gap-2 pl-7">
-                {mod.lessons.map((lesson, li) => (
-                  <li key={lesson.id} className="flex items-center gap-3">
-                    <span className="shrink-0 text-xs text-ink/40">{li + 1}.</span>
-                    <input
-                      value={lesson.title}
-                      onChange={(e) => renameLesson(mod.id, lesson.id, e.target.value)}
-                      className="flex-1 rounded-lg border border-teal-100 bg-white px-3 py-1.5 text-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-400"
-                    />
-                    <input
-                      type="number"
-                      min={1}
-                      value={lesson.minutes}
-                      onChange={(e) => setLessonMinutes(mod.id, lesson.id, Number(e.target.value))}
-                      className="w-20 shrink-0 rounded-lg border border-teal-100 bg-white px-2 py-1.5 text-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-400"
-                    />
-                    <span className="shrink-0 text-xs text-ink/40">min</span>
-                    <button
-                      type="button"
-                      onClick={() => removeLesson(mod.id, lesson.id)}
-                      className="shrink-0 rounded-lg px-2 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50"
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <button
-                type="button"
-                onClick={() => addLesson(mod.id)}
-                className="mt-3 ml-7 rounded-full border border-teal-200 bg-white px-3 py-1.5 text-xs font-medium text-teal-700 transition hover:bg-teal-50"
-              >
-                + Add lesson
-              </button>
+            <div>
+              <label className="text-sm font-medium text-ink/70">Level</label>
+              <select name="level" defaultValue={course?.level ?? "BEGINNER"} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none">
+                <option value="BEGINNER">Beginner</option>
+                <option value="INTERMEDIATE">Intermediate</option>
+                <option value="ADVANCED">Advanced</option>
+                <option value="ALL_LEVELS">All levels</option>
+              </select>
             </div>
-          ))}
+            <div>
+              <label className="text-sm font-medium text-ink/70">Language</label>
+              <input name="language" defaultValue={course?.language ?? "English"} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink/70">Short description (~160 chars, used on cards)</label>
+            <textarea
+              name="shortDescription"
+              defaultValue={course?.shortDescription ?? ""}
+              maxLength={200}
+              rows={2}
+              required
+              className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink/70">Full description</label>
+            <div className="mt-1">
+              <RichTextEditor content={descriptionHtml} onChange={setDescriptionHtml} />
+            </div>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-3">
+            <DynamicListEditor label="What you'll learn" placeholder="Outcome" items={outcomes} onChange={setOutcomes} />
+            <DynamicListEditor label="Requirements" placeholder="Requirement" items={requirements} onChange={setRequirements} />
+            <DynamicListEditor label="Target audience" placeholder="Audience" items={audience} onChange={setAudience} />
+          </div>
         </div>
       </div>
+
+      <div className={tab === "media" ? "" : "hidden"}>
+        <div className="grid gap-6 rounded-2xl border border-teal-100 bg-white p-6 sm:grid-cols-2">
+          <div>
+            <label className="text-sm font-medium text-ink/70">Thumbnail (1280×720 recommended)</label>
+            <div className="relative mt-1 aspect-video w-full overflow-hidden rounded-xl border border-teal-100 bg-teal-50">
+              {thumbnailUrl && <Image src={thumbnailUrl} alt="" fill className="object-cover" unoptimized={thumbnailUrl.startsWith("/uploads")} />}
+            </div>
+            <input
+              name="thumbnailUrl"
+              value={thumbnailUrl}
+              onChange={(e) => setThumbnailUrl(e.target.value)}
+              placeholder="https://..."
+              className="mt-2 w-full rounded-lg border border-teal-100 px-4 py-2 text-sm focus:border-teal-400 focus:outline-none"
+            />
+            <label className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-teal-200 px-4 py-2.5 text-sm font-medium text-teal-700 hover:bg-teal-50">
+              <input type="file" name="thumbnailFile" accept="image/*" className="sr-only" />
+              Or upload a new thumbnail
+            </label>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink/70">Preview video URL</label>
+            <input
+              name="previewVideoUrl"
+              defaultValue={course?.previewVideoUrl ?? "/videos/placeholder-1.mp4"}
+              className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none"
+            />
+            <label className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-teal-200 px-4 py-2.5 text-sm font-medium text-teal-700 hover:bg-teal-50">
+              <input type="file" name="previewVideoFile" accept="video/*" className="sr-only" />
+              Or upload a video file
+            </label>
+            <p className="mt-2 text-xs text-ink/40">Leave as a placeholder path to reuse the demo clip pool in public/videos.</p>
+          </div>
+        </div>
+      </div>
+
+      <div className={tab === "curriculum" ? "" : "hidden"}>
+        <div className="rounded-2xl border border-teal-100 bg-white p-6">
+          <CurriculumBuilder modules={modules} onChange={setModules} />
+        </div>
+      </div>
+
+      <div className={tab === "pricing" ? "" : "hidden"}>
+        <div className="space-y-5 rounded-2xl border border-teal-100 bg-white p-6">
+          <label className="flex items-center gap-2 text-sm font-medium text-ink/80">
+            <input type="checkbox" name="isFree" checked={isFree} onChange={(e) => setIsFree(e.target.checked)} className="h-4 w-4 rounded border-teal-300 text-teal-600" />
+            This course is free
+          </label>
+          {!isFree && (
+            <div className="grid gap-5 sm:grid-cols-3">
+              <div>
+                <label className="text-sm font-medium text-ink/70">Price (KES)</label>
+                <input name="priceKes" type="number" min={0} defaultValue={course?.priceKes ?? 0} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-ink/70">Sale price (KES, optional)</label>
+                <input name="salePriceKes" type="number" min={0} defaultValue={course?.salePriceKes ?? ""} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-ink/70">Sale ends</label>
+                <input name="saleEndsAt" type="date" defaultValue={course?.saleEndsAt?.slice(0, 10) ?? ""} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className={tab === "seo" ? "" : "hidden"}>
+        <div className="space-y-5 rounded-2xl border border-teal-100 bg-white p-6">
+          <div>
+            <label className="text-sm font-medium text-ink/70">Meta title</label>
+            <input name="metaTitle" defaultValue={course?.metaTitle ?? ""} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink/70">Meta description</label>
+            <textarea name="metaDescription" defaultValue={course?.metaDescription ?? ""} rows={2} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink/70">OG image URL (defaults to thumbnail)</label>
+            <input name="ogImageUrl" defaultValue={course?.ogImageUrl ?? ""} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+          </div>
+        </div>
+      </div>
+
+      <div className={tab === "settings" ? "" : "hidden"}>
+        <div className="space-y-5 rounded-2xl border border-teal-100 bg-white p-6">
+          <label className="flex items-center gap-2 text-sm font-medium text-ink/80">
+            <input type="checkbox" name="isFeatured" defaultChecked={course?.isFeatured} className="h-4 w-4 rounded border-teal-300 text-teal-600" />
+            Featured on homepage
+          </label>
+          <div className="grid gap-5 sm:grid-cols-3">
+            <div>
+              <label className="text-sm font-medium text-ink/70">Enrollment cap (optional)</label>
+              <input name="enrollmentCap" type="number" min={1} defaultValue={course?.enrollmentCap ?? ""} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-ink/70">Enrollment opens</label>
+              <input name="enrollmentOpensAt" type="date" defaultValue={course?.enrollmentOpensAt?.slice(0, 10) ?? ""} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-ink/70">Enrollment closes</label>
+              <input name="enrollmentClosesAt" type="date" defaultValue={course?.enrollmentClosesAt?.slice(0, 10) ?? ""} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {state?.error && <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{state.error}</p>}
 
       <div className="flex items-center gap-4">
         <button
           type="submit"
-          className="rounded-full bg-teal-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700"
+          name="status"
+          value="DRAFT"
+          disabled={pending}
+          className="rounded-full border border-teal-200 px-6 py-2.5 text-sm font-semibold text-teal-700 transition hover:bg-teal-50 disabled:opacity-60"
         >
-          {course ? "Save changes" : "Create course"}
+          Save draft
         </button>
         <button
-          type="button"
-          onClick={() => showToast("Saved as draft.")}
-          className="rounded-full border border-teal-100 px-6 py-2.5 text-sm font-medium text-ink/70 transition hover:bg-teal-50"
+          type="submit"
+          name="status"
+          value="PUBLISHED"
+          disabled={pending}
+          className="rounded-full bg-teal-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-60"
         >
-          Save as draft
+          {pending ? "Saving…" : "Publish"}
         </button>
-        <p className="text-xs text-ink/40">
-          Demo build — changes aren&apos;t persisted beyond this session.
-        </p>
       </div>
-
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-teal-900 px-5 py-3 text-sm font-medium text-white shadow-xl">
-          {toast}
-        </div>
-      )}
     </form>
   );
 }

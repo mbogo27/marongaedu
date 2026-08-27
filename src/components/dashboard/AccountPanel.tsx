@@ -14,11 +14,13 @@ export default function AccountPanel({
   bio,
   notifyEmail,
   notifyMarketing,
+  hideDelete,
 }: {
   name: string;
   bio: string | null;
   notifyEmail: boolean;
   notifyMarketing: boolean;
+  hideDelete?: boolean;
 }) {
   const [profileState, profileAction, profilePending] = useActionState<AccountFormState, FormData>(updateProfileAction, undefined);
   const [passwordState, passwordAction, passwordPending] = useActionState<AccountFormState, FormData>(changePasswordAction, undefined);
@@ -138,6 +140,7 @@ export default function AccountPanel({
         </button>
       </form>
 
+      {!hideDelete && (
       <div className="rounded-2xl border border-red-100 bg-red-50/50 p-6">
         <h3 className="font-serif text-lg text-red-700">Delete account</h3>
         <p className="mt-1 text-sm text-red-600/80">This deactivates your account. This action cannot be undone from the UI.</p>
@@ -166,6 +169,7 @@ export default function AccountPanel({
           </button>
         )}
       </div>
+      )}
     </div>
   );
 }

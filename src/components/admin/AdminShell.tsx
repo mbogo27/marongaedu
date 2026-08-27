@@ -2,14 +2,29 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { adminLogoutAction } from "@/lib/actions/auth";
 
 const navItems = [
   { href: "/admin", label: "Dashboard", exact: true },
   { href: "/admin/courses", label: "Courses" },
+  { href: "/admin/categories", label: "Categories" },
   { href: "/admin/students", label: "Students" },
+  { href: "/admin/enrollments", label: "Enrollments" },
+  { href: "/admin/payments", label: "Payments" },
+  { href: "/admin/coupons", label: "Coupons" },
+  { href: "/admin/reviews", label: "Reviews" },
+  { href: "/admin/messages", label: "Messages" },
+  { href: "/admin/notifications", label: "Notifications" },
+  { href: "/admin/settings", label: "Settings" },
 ];
 
-export default function AdminShell({ children }: { children: React.ReactNode }) {
+export default function AdminShell({
+  children,
+  adminName,
+}: {
+  children: React.ReactNode;
+  adminName: string;
+}) {
   const pathname = usePathname();
 
   return (
@@ -25,7 +40,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           </div>
         </Link>
 
-        <nav className="mt-8 flex flex-col gap-1 text-sm font-medium">
+        <nav className="mt-8 flex flex-col gap-1 text-sm font-medium overflow-y-auto">
           {navItems.map((item) => {
             const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
             return (
@@ -33,9 +48,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                 key={item.href}
                 href={item.href}
                 className={`rounded-lg px-3 py-2 transition ${
-                  active
-                    ? "bg-teal-600 text-white shadow-sm"
-                    : "text-ink/70 hover:bg-teal-50"
+                  active ? "bg-teal-600 text-white shadow-sm" : "text-ink/70 hover:bg-teal-50"
                 }`}
               >
                 {item.label}
@@ -45,15 +58,17 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         </nav>
 
         <div className="mt-auto flex flex-col gap-1 border-t border-teal-100 pt-4 text-sm">
+          <Link href="/admin/profile" className="truncate rounded-lg px-3 py-2 font-medium text-ink/70 hover:bg-teal-50">
+            {adminName}
+          </Link>
           <Link href="/" className="rounded-lg px-3 py-2 font-medium text-ink/70 hover:bg-teal-50">
             ← View live site
           </Link>
-          <Link
-            href="/admin/login"
-            className="rounded-lg px-3 py-2 font-medium text-ink/50 hover:bg-teal-50"
-          >
-            Log out
-          </Link>
+          <form action={adminLogoutAction}>
+            <button type="submit" className="w-full rounded-lg px-3 py-2 text-left font-medium text-ink/50 hover:bg-teal-50">
+              Log out
+            </button>
+          </form>
         </div>
       </aside>
 
@@ -76,9 +91,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               <Link
                 key={item.href}
                 href={item.href}
-                className={`shrink-0 rounded-full px-3 py-1.5 ${
-                  active ? "bg-teal-600 text-white" : "text-ink/60"
-                }`}
+                className={`shrink-0 rounded-full px-3 py-1.5 ${active ? "bg-teal-600 text-white" : "text-ink/60"}`}
               >
                 {item.label}
               </Link>
