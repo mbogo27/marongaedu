@@ -29,7 +29,7 @@ export default function LessonFooter({
 
   const nav = "rounded-full border px-4 py-2 text-sm font-medium";
   const enabled = "border-teal-200 text-ink/80 hover:bg-teal-50";
-  const disabled = "pointer-events-none border-teal-50 text-ink/40";
+  const disabled = "pointer-events-none border-teal-50 text-ink/70 opacity-60";
 
   return (
     <div className="border-t border-teal-100 pt-4">

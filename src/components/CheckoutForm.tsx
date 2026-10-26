@@ -375,7 +375,7 @@ export default function CheckoutForm({
             </button>
           ))}
         </div>
-        {currency === "USD" && <p className="mt-2 text-xs text-ink/60">USD is for display only — you are charged in KES.</p>}
+        {currency === "USD" && <p className="mt-2 text-xs text-ink/70">USD is for display only — you are charged in KES.</p>}
       </div>
     </div>
   );

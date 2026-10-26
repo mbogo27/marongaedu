@@ -32,7 +32,7 @@ export default function Pagination({
       <Link
         href={hrefFor(Math.max(1, page - 1))}
         aria-disabled={page === 1}
-        className={`rounded-full border px-3 py-1.5 text-sm ${page === 1 ? "pointer-events-none border-teal-50 text-ink/60" : "border-teal-100 text-teal-800 hover:bg-teal-50"}`}
+        className={`rounded-full border px-3 py-1.5 text-sm ${page === 1 ? "pointer-events-none border-teal-50 text-ink/70" : "border-teal-100 text-teal-800 hover:bg-teal-50"}`}
       >
         Previous
       </Link>
@@ -49,7 +49,7 @@ export default function Pagination({
       <Link
         href={hrefFor(Math.min(totalPages, page + 1))}
         aria-disabled={page === totalPages}
-        className={`rounded-full border px-3 py-1.5 text-sm ${page === totalPages ? "pointer-events-none border-teal-50 text-ink/60" : "border-teal-100 text-teal-800 hover:bg-teal-50"}`}
+        className={`rounded-full border px-3 py-1.5 text-sm ${page === totalPages ? "pointer-events-none border-teal-50 text-ink/70" : "border-teal-100 text-teal-800 hover:bg-teal-50"}`}
       >
         Next
       </Link>

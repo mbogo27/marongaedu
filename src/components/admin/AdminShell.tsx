@@ -76,7 +76,7 @@ export default function AdminShell({
         </div>
       </aside>
 
-      <div className="flex-1">
+      <div className="min-w-0 flex-1">
         <header className="flex items-center justify-between border-b border-teal-100 bg-white px-6 py-4 md:hidden">
           <Link href="/admin" className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-600 font-serif text-paper">

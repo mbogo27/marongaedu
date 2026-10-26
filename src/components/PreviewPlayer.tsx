@@ -37,7 +37,7 @@ export default function PreviewPlayer({
           setPlaying(true);
         }}
         className="group absolute inset-0 flex h-full w-full items-center justify-center focus-visible:outline-2 focus-visible:outline-gold-400"
-        aria-label={`Play preview video for ${title}`}
+        aria-label={`Preview · Free. Play preview video for ${title}`}
       >
         {posterUrl && (
           <Image src={posterUrl} alt="" fill sizes="(min-width: 1024px) 720px, 100vw" className="object-cover opacity-80 transition group-hover:opacity-60" />

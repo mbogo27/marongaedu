@@ -60,7 +60,10 @@ function useDndSensors() {
   );
 }
 
-export default function CurriculumBuilder({ modules, onChange }: { modules: EditableModule[]; onChange: (modules: EditableModule[]) => void }) {
+type ModulesUpdate = EditableModule[] | ((prev: EditableModule[]) => EditableModule[]);
+type ModulePatch = Partial<EditableModule> | ((mod: EditableModule) => Partial<EditableModule>);
+
+export default function CurriculumBuilder({ modules, onChange }: { modules: EditableModule[]; onChange: (next: ModulesUpdate) => void }) {
   const sensors = useDndSensors();
 
   function handleModuleDragEnd(event: DragEndEvent) {
@@ -68,7 +71,9 @@ export default function CurriculumBuilder({ modules, onChange }: { modules: Edit
     if (!over || active.id === over.id) return;
     onChange(arrayMove(modules, modules.findIndex((m) => m.id === active.id), modules.findIndex((m) => m.id === over.id)));
   }
-  const updateModule = (id: string, patch: Partial<EditableModule>) => onChange(modules.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  // Functional updates: async callbacks (upload finished, duration probed) must not overwrite each other with a stale snapshot.
+  const updateModule = (id: string, patch: ModulePatch) =>
+    onChange((prev) => prev.map((m) => (m.id === id ? { ...m, ...(typeof patch === "function" ? patch(m) : patch) } : m)));
 
   function moveLessonToModule(lessonId: string, fromModuleId: string, toModuleId: string) {
     if (fromModuleId === toModuleId) return;
@@ -135,7 +140,7 @@ function SortableModule({
   mod: EditableModule;
   index: number;
   allModules: EditableModule[];
-  onUpdate: (patch: Partial<EditableModule>) => void;
+  onUpdate: (patch: ModulePatch) => void;
   onRemove: () => void;
   onMoveLesson: (lessonId: string, toModuleId: string) => void;
 }) {
@@ -151,7 +156,7 @@ function SortableModule({
     });
   }
   const updateLesson = (lessonId: string, patch: Partial<EditableLesson>) =>
-    onUpdate({ lessons: mod.lessons.map((l) => (l.id === lessonId ? { ...l, ...patch } : l)) });
+    onUpdate((m) => ({ lessons: m.lessons.map((l) => (l.id === lessonId ? { ...l, ...patch } : l)) }));
 
   return (
     <div
@@ -202,7 +207,7 @@ function SortableModule({
                     onUpdate={(patch) => updateLesson(lesson.id, patch)}
                     onRemove={() => {
                       if (window.confirm(`Remove lesson "${lesson.title}"? Learner progress on it will be lost.`)) {
-                        onUpdate({ lessons: mod.lessons.filter((l) => l.id !== lesson.id) });
+                        onUpdate((m) => ({ lessons: m.lessons.filter((l) => l.id !== lesson.id) }));
                       }
                     }}
                     onMoveToModule={(toId) => onMoveLesson(lesson.id, toId)}
@@ -214,7 +219,7 @@ function SortableModule({
 
           <div className="mt-3 flex flex-wrap gap-2 sm:pl-4">
             {(["VIDEO", "READING", "QUIZ", "RESOURCE"] as const).map((type) => (
-              <button key={type} type="button" onClick={() => onUpdate({ lessons: [...mod.lessons, newLesson(type)] })} className={chip}>
+              <button key={type} type="button" onClick={() => onUpdate((m) => ({ lessons: [...m.lessons, newLesson(type)] }))} className={chip}>
                 + {type === "VIDEO" ? "Video lesson" : type === "READING" ? "Reading lesson" : type === "QUIZ" ? "Quiz" : "Resource"}
               </button>
             ))}

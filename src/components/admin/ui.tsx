@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-export const tableWrap = "overflow-x-auto rounded-2xl border border-teal-100 bg-white";
+export const tableWrap = "relative overflow-x-auto rounded-2xl border border-teal-100 bg-white";
 export const th = "px-4 py-3 font-medium";
 export const td = "px-4 py-3";
 export const filterInput = "rounded-lg border border-teal-200 bg-white px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30";

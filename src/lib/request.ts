@@ -20,7 +20,6 @@ export async function getUserAgent(): Promise<string | null> {
 export function safeRedirect(target: unknown, fallback = "/dashboard"): string {
   if (typeof target !== "string" || !target) return fallback;
   if (!target.startsWith("/") || target.startsWith("//") || target.includes("\\")) return fallback;
-  // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001f]/.test(target)) return fallback;
   try {
     const u = new URL(target, "http://local.invalid");

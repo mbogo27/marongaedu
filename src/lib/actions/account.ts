@@ -8,7 +8,7 @@ import { requireUser } from "@/lib/dal";
 import { deleteSession, revokeUserSessions, verifySessionId } from "@/lib/session";
 import { formatRetry, getRateLimiter } from "@/lib/rate-limit";
 import { isCommonPassword, verifyPassword } from "@/lib/auth/password";
-import { getCredentialAccount, hasPassword, isLastActiveAdmin, setPassword } from "@/lib/auth/users";
+import { getCredentialAccount, isLastActiveAdmin, setPassword } from "@/lib/auth/users";
 import { issueToken } from "@/lib/auth/verification";
 import { DEFAULT_PREFS } from "@/lib/email/send";
 import { sendEmail } from "@/lib/email/send";

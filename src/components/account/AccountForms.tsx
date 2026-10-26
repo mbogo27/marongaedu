@@ -37,7 +37,7 @@ export function ProfileForm({ name, bio }: { name: string; bio: string | null })
         <Field label="Full name" name="name" defaultValue={name} required error={state?.fieldErrors?.name?.[0]} />
         <div>
           <label htmlFor="bio" className="text-sm font-medium text-ink/80">
-            Bio <span className="text-ink/60">(optional)</span>
+            Bio <span className="text-ink/70">(optional)</span>
           </label>
           <textarea id="bio" name="bio" defaultValue={bio ?? ""} rows={3} maxLength={1000} className={inputClass} />
         </div>
@@ -130,7 +130,7 @@ export function EmailForm({ email, verified, hasPassword }: { email: string; ver
           <button type="submit" disabled={pending} className={`mt-3 ${primaryButtonClass}`}>
             {pending ? "Sending…" : "Send confirmation link"}
           </button>
-          <p className="mt-2 text-xs text-ink/60">Your email only changes after you confirm the new address.</p>
+          <p className="mt-2 text-xs text-ink/70">Your email only changes after you confirm the new address.</p>
         </div>
       </form>
     </Section>
@@ -150,7 +150,7 @@ export function SessionsList({ sessions }: { sessions: SessionRow[] }) {
               <p className="font-medium text-ink">
                 {s.device} {s.current && <span className="ml-1 rounded-full bg-teal-50 px-2 py-0.5 text-xs text-teal-800">This device</span>}
               </p>
-              <p className="text-xs text-ink/60">
+              <p className="text-xs text-ink/70">
                 {s.ip ?? "Unknown IP"} · last active {s.lastActive}
               </p>
             </div>
@@ -199,7 +199,7 @@ export function NotificationForm({ prefs }: { prefs: { courseUpdates: boolean; c
           <input type="checkbox" name="marketing" defaultChecked={prefs.marketing} className={box} />
           New course announcements
         </label>
-        <p className="text-xs text-ink/60">Security emails (password, email changes, verification) are always sent.</p>
+        <p className="text-xs text-ink/70">Security emails (password, email changes, verification) are always sent.</p>
         <FormMessage error={state?.error} message={state?.success} />
         <button type="submit" disabled={pending} className={primaryButtonClass}>
           {pending ? "Saving…" : "Save preferences"}

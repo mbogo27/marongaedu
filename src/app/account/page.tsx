@@ -99,7 +99,7 @@ export default async function AccountPage({
                               {p.invoiceNumber}
                             </a>
                           ) : (
-                            <span className="text-ink/50">—</span>
+                            <span className="text-ink/70">—</span>
                           )}
                         </td>
                       </tr>

@@ -32,7 +32,7 @@ export function Field({ label, error, hint, id, name, className, ...rest }: Fiel
         {...rest}
       />
       {hint && (
-        <div id={hintId} className="mt-1 text-xs text-ink/60">
+        <div id={hintId} className="mt-1 text-xs text-ink/70">
           {hint}
         </div>
       )}

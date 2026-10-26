@@ -154,7 +154,7 @@ async function Certificates({ userId }: { userId: string }) {
         <div key={cert.id} className="flex items-center justify-between rounded-2xl border border-teal-100 bg-white p-5">
           <div>
             <p className="font-serif text-teal-900">{cert.enrollment.course.title}</p>
-            <p className="text-sm text-ink/60">Issued {formatDate(cert.issuedAt)}</p>
+            <p className="text-sm text-ink/70">Issued {formatDate(cert.issuedAt)}</p>
           </div>
           <Link href={`/certificates/${cert.id}`} className="rounded-full bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700">
             View

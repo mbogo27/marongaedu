@@ -28,7 +28,7 @@ export default function GoogleButton({ label = "Continue with Google", redirectT
         <GoogleIcon />
         {label}
       </a>
-      <div className="my-6 flex items-center gap-3 text-xs uppercase tracking-wide text-ink/60" aria-hidden="true">
+      <div className="my-6 flex items-center gap-3 text-xs uppercase tracking-wide text-ink/70" aria-hidden="true">
         <span className="h-px flex-1 bg-teal-100" />
         or
         <span className="h-px flex-1 bg-teal-100" />

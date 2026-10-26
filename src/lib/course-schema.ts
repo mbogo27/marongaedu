@@ -137,5 +137,6 @@ export type EditorInitial = {
 };
 
 export function emptyPayload(categoryId: string): CoursePayload {
-  return coursePayloadSchema.parse({ title: "", categoryId });
+  // Parse with a placeholder title (a blank one is invalid by design), then clear it for the form.
+  return { ...coursePayloadSchema.parse({ title: "x", categoryId }), title: "" };
 }

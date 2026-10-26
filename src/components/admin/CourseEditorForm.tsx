@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { saveCourseAction } from "@/lib/actions/admin/courses";
 import { publishChecklist, type CoursePayload, type EditorCoupon, type EditorInitial } from "@/lib/course-schema";
 import { slugify } from "@/lib/format";
@@ -27,28 +28,38 @@ export default function CourseEditorForm({
   initial,
   categories,
   coupons,
+  initialTab = "basics",
 }: {
   initial: EditorInitial;
   categories: { id: string; name: string }[];
   coupons: EditorCoupon[];
+  initialTab?: string;
 }) {
-  const [tab, setTab] = useState<Tab>("basics");
+  const router = useRouter();
+  const [tab, setTab] = useState<Tab>(TABS.find((t) => t === initialTab) ?? "basics");
+  const tabRef = useRef(tab);
+  useEffect(() => {
+    tabRef.current = tab;
+  }, [tab]);
   const [data, setData] = useState<CoursePayload>(initial.payload);
   const [courseId, setCourseId] = useState<string | null>(initial.id);
   const [savedSlug, setSavedSlug] = useState(initial.slug);
   const [status, setStatus] = useState(initial.status);
   const [slugTouched, setSlugTouched] = useState(!!initial.id);
+  const [retryTick, setRetryTick] = useState(0);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
   const [message, setMessage] = useState<{ tone: "error" | "ok"; text: string } | null>(null);
 
-  const lastSaved = useRef(JSON.stringify(initial.payload));
+  const [savedJson, setSavedJson] = useState(() => JSON.stringify(initial.payload));
   const saving = useRef(false);
   const queued = useRef<"autosave" | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef(data);
-  latest.current = data;
+  useEffect(() => {
+    latest.current = data;
+  }, [data]);
 
-  const dirty = JSON.stringify(data) !== lastSaved.current;
+  const dirty = JSON.stringify(data) !== savedJson;
   const checklist = useMemo(() => publishChecklist(data), [data]);
   const requiredMissing = checklist.filter((c) => c.required && !c.ok);
 
@@ -74,15 +85,19 @@ export default function CourseEditorForm({
         setCourseId(res.course.id);
         setSavedSlug(res.course.slug);
         setStatus(res.course.status);
-        lastSaved.current = JSON.stringify(snapshot);
         // Server may have adjusted the slug (uniqueness) or status (publish/unpublish).
         setData((d) => ({ ...d, slug: res.course.slug, status: res.course.status }));
-        lastSaved.current = JSON.stringify({ ...snapshot, slug: res.course.slug, status: res.course.status });
+        setSavedJson(JSON.stringify({ ...snapshot, slug: res.course.slug, status: res.course.status }));
         setSaveStatus({ kind: "saved", at: new Date() });
         if (intent !== "autosave") {
           setMessage({ tone: "ok", text: intent === "publish" ? "Published. The course is live." : intent === "unpublish" ? "Unpublished." : "Saved." });
         }
-        if (typeof window !== "undefined" && window.location.pathname !== `/admin/courses/${res.course.slug}`) {
+        // A brand-new course moves from /new to its own URL. That is a real navigation (the page tree
+        // remounts), so only do it when nothing was typed while the save was in flight.
+        if (window.location.pathname.endsWith("/courses/new")) {
+          if (JSON.stringify(latest.current) === JSON.stringify(snapshot)) router.replace(`/admin/courses/${res.course.slug}?tab=${tabRef.current}`);
+        } else if (window.location.pathname !== `/admin/courses/${res.course.slug}`) {
+          // Renamed slug of an existing course: same page tree, so just keep the address bar (and router) in sync.
           window.history.replaceState(null, "", `/admin/courses/${res.course.slug}`);
         }
       } catch {
@@ -91,11 +106,11 @@ export default function CourseEditorForm({
         saving.current = false;
         if (queued.current) {
           queued.current = null;
-          void doSave("autosave");
+          setRetryTick((n) => n + 1); // edits arrived mid-save: let the autosave effect pick them up
         }
       }
     },
-    [courseId]
+    [courseId, router]
   );
 
   // Debounced autosave (drafts only get created once there's a title + category).
@@ -106,7 +121,7 @@ export default function CourseEditorForm({
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [data, dirty, doSave]);
+  }, [data, dirty, doSave, retryTick]);
 
   // "Unsaved changes" guard: tab close/reload, and in-app link clicks.
   useEffect(() => {
@@ -294,7 +309,7 @@ export default function CourseEditorForm({
       {/* CURRICULUM */}
       <div role="tabpanel" id="panel-curriculum" aria-labelledby="tab-curriculum" hidden={tab !== "curriculum"}>
         <div className="rounded-2xl border border-teal-100 bg-white p-6">
-          <CurriculumBuilder modules={data.modules} onChange={(modules) => patch({ modules })} />
+          <CurriculumBuilder modules={data.modules} onChange={(next) => setData((d) => ({ ...d, modules: typeof next === "function" ? next(d.modules) : next }))} />
         </div>
       </div>
 

@@ -54,6 +54,7 @@ next-env.d.ts
 # local storage + test artifacts
 /.storage/
 /.storage-test/
+/.storage-e2e/
 /test-results/
 /playwright-report/
 /blob-report/

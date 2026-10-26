@@ -127,7 +127,7 @@ export default async function CourseDetailPage({
       )}
       <main id="main" className="flex-1">
         <section className="border-b border-teal-100 bg-teal-50/40">
-          <div className="mx-auto grid max-w-6xl gap-10 px-4 py-10 sm:px-6 lg:grid-cols-[1fr_420px]">
+          <div className="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_420px]">
             <div>
               <nav aria-label="Breadcrumb" className="mb-3 text-sm text-ink/70">
                 <Link href="/courses" className="hover:text-teal-800 hover:underline">Courses</Link>
@@ -216,8 +216,8 @@ export default async function CourseDetailPage({
         />
 
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-          <div className="grid gap-10 lg:grid-cols-[1fr_420px]">
-            <div className="space-y-10">
+          <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_420px]">
+            <div className="min-w-0 space-y-10">
               {course.outcomes.length > 0 && (
                 <section aria-labelledby="learn-h">
                   <h2 id="learn-h" className="font-serif text-2xl text-teal-900">What you&apos;ll learn</h2>

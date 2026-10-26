@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { getUsdRate } from "@/lib/settings";
 import { formatKes, formatUsd } from "@/lib/format";
 
-export const CURRENCY_COOKIE = "display_currency";
+import { CURRENCY_COOKIE } from "@/lib/currency-constants";
 
 export type DisplayCurrency = { currency: "KES" | "USD"; rate: number; format: (kes: number) => string };
 

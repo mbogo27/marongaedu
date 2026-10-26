@@ -35,22 +35,33 @@ export default function CurriculumAccordion({ modules, posterUrl }: { modules: C
   const [preview, setPreview] = useState<{ lesson: CurriculumLesson; body: LessonBody | null; loading: boolean } | null>(null);
   const [, startTransition] = useTransition();
   const closeRef = useRef<HTMLButtonElement>(null);
+  const previewRequest = useRef(0);
   const lessonCount = modules.reduce((sum, m) => sum + m.lessons.length, 0);
 
   const isOpen = (id: string) => expandAll || !!open[id];
 
   function openPreview(lesson: CurriculumLesson) {
+    const request = ++previewRequest.current;
     setPreview({ lesson, body: null, loading: true });
     startTransition(async () => {
       const body = await previewLessonAction(lesson.id);
-      setPreview({ lesson, body, loading: false });
+      if (request === previewRequest.current) setPreview({ lesson, body, loading: false });
     });
+  }
+
+  // A preview still loading must not reopen the dialog after it was closed.
+  function closePreview() {
+    previewRequest.current++;
+    setPreview(null);
   }
 
   useEffect(() => {
     if (!preview) return;
     closeRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setPreview(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      closePreview();
+    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [preview]);
@@ -132,12 +143,12 @@ export default function CurriculumAccordion({ modules, posterUrl }: { modules: C
           aria-modal="true"
           aria-label={`Preview: ${preview.lesson.title}`}
           className="fixed inset-0 z-50 flex items-center justify-center bg-teal-950/70 px-4"
-          onClick={() => setPreview(null)}
+          onClick={closePreview}
         >
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="mb-2 flex items-center justify-between text-white">
               <p className="font-medium">{preview.lesson.title}</p>
-              <button ref={closeRef} type="button" onClick={() => setPreview(null)} aria-label="Close preview" className="rounded px-2 py-1 hover:bg-white/10">
+              <button ref={closeRef} type="button" onClick={closePreview} aria-label="Close preview" className="rounded px-2 py-1 hover:bg-white/10">
                 ✕
               </button>
             </div>

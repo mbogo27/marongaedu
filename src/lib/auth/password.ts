@@ -27,5 +27,10 @@ function commonPasswords(): Set<string> {
 }
 
 export function isCommonPassword(password: string): boolean {
-  return commonPasswords().has(password.toLowerCase());
+  const list = commonPasswords();
+  const lower = password.toLowerCase();
+  if (list.has(lower)) return true;
+  // "password1234", "Summer2020!": a common word with trailing digits/symbols bolted on.
+  const stem = lower.replace(/[\d!@#$%^&*._-]+$/, "");
+  return stem.length >= 4 && stem !== lower && list.has(stem);
 }

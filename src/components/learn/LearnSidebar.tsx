@@ -80,7 +80,7 @@ export default function LearnSidebar({
                 return (
                   <li key={lesson.id}>
                     {lesson.locked ? (
-                      <span aria-disabled="true" className="flex cursor-not-allowed items-center gap-3 px-4 py-2.5 text-sm text-ink/60">
+                      <span aria-disabled="true" className="flex cursor-not-allowed items-center gap-3 px-4 py-2.5 text-sm text-ink/70">
                         {inner}
                       </span>
                     ) : (

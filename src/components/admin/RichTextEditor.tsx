@@ -97,7 +97,7 @@ function Btn({ active, onClick, label, text }: { active: boolean; onClick: () =>
     <button
       type="button"
       onClick={onClick}
-      aria-label={label}
+      aria-label={`${text} ${label}`}
       aria-pressed={active}
       className={`rounded px-2 py-1 text-xs font-medium transition ${active ? "bg-teal-700 text-white" : "text-ink/80 hover:bg-teal-100"}`}
     >

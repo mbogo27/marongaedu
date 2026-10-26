@@ -35,7 +35,7 @@ export default async function LoginPage({
           socialSlot={<GoogleButton redirectTo={safe || undefined} />}
           hint={
             env.NODE_ENV !== "production" ? (
-              <p className="mt-6 text-center text-xs text-ink/60">
+              <p className="mt-6 text-center text-xs text-ink/70">
                 Demo accounts use password <code className="rounded bg-teal-50 px-1 py-0.5 text-teal-800">Demo@1234</code>{" "}
                 (see README).
               </p>

@@ -57,6 +57,15 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
 
+  // The browser may have loaded metadata before React attached onLoadedMetadata (server-rendered <video>).
+  useEffect(() => {
+    const el = videoRef.current;
+    if (el && el.readyState >= 1) {
+      setDuration(el.duration || 0);
+      if (resumeAt.current > 0 && resumeAt.current < (el.duration || Infinity) - 2 && el.currentTime < 1) el.currentTime = resumeAt.current;
+    }
+  }, []);
+
   useImperativeHandle(ref, () => ({
     seekTo: (seconds, play = true) => {
       const el = videoRef.current;
@@ -330,11 +339,11 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
         </select>
 
         {captions.length > 0 && (
-          <button type="button" onClick={toggleCaptions} aria-pressed={captionsOn} aria-label="Captions" className={`${btn} ${captionsOn ? "border-gold-400 text-gold-300" : ""}`}>
+          <button type="button" onClick={toggleCaptions} aria-pressed={captionsOn} aria-label="CC captions" className={`${btn} ${captionsOn ? "border-gold-400 text-gold-300" : ""}`}>
             CC
           </button>
         )}
-        <button type="button" onClick={togglePip} aria-label="Picture in picture" className={btn}>
+        <button type="button" onClick={togglePip} aria-label="PiP picture in picture" className={btn}>
           PiP
         </button>
         <button type="button" onClick={toggleFullscreen} aria-label="Fullscreen" className={btn}>

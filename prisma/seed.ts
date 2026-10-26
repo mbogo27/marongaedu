@@ -355,7 +355,7 @@ async function main() {
 
   // The three named demo states (0% / 40% / 100% + certificate).
   await enroll(learner0.id, endo, { progressPercent: 0, method: "MPESA", enrolledAt: daysAgo(1) });
-  const e40 = await enroll(learner40.id, composite, { progressPercent: 40, method: "CARD", enrolledAt: daysAgo(10) });
+  await enroll(learner40.id, composite, { progressPercent: 40, method: "CARD", enrolledAt: daysAgo(10) });
   await enroll(learner100.id, pediatric, { progressPercent: 100, enrolledAt: daysAgo(45), certificate: true });
   await enroll(learner40.id, anesthesia, { progressPercent: 20, method: "MANUAL", enrolledAt: daysAgo(3) });
   if (practice) await enroll(learner100.id, practice, { progressPercent: 40, method: "MPESA", enrolledAt: daysAgo(30) });

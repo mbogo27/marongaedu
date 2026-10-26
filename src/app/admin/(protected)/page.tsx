@@ -63,7 +63,7 @@ export default async function AdminDashboardPage({
         </form>
       </div>
 
-      <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {tiles.map((tile) => (
           <div key={tile.label} className="rounded-2xl border border-teal-100 bg-white p-6 shadow-sm">
             <p className="text-sm font-medium text-ink/70">{tile.label}</p>
@@ -73,7 +73,7 @@ export default async function AdminDashboardPage({
         ))}
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section aria-labelledby="rev-h" className="rounded-2xl border border-teal-100 bg-white p-6 shadow-sm">
           <h2 id="rev-h" className="font-serif text-lg text-teal-900">Revenue — {range.label.toLowerCase()}</h2>
           <RevenueChart data={stats.revenueSeries} />
@@ -84,7 +84,7 @@ export default async function AdminDashboardPage({
         </section>
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section aria-labelledby="top-rev-h" className="rounded-2xl border border-teal-100 bg-white p-6 shadow-sm">
           <h2 id="top-rev-h" className="font-serif text-lg text-teal-900">Top courses by revenue</h2>
           <ul className="mt-4 divide-y divide-teal-50">
@@ -111,7 +111,7 @@ export default async function AdminDashboardPage({
         </section>
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section aria-labelledby="rec-enr-h" className="rounded-2xl border border-teal-100 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <h2 id="rec-enr-h" className="font-serif text-lg text-teal-900">Recent enrollments</h2>
@@ -151,7 +151,7 @@ export default async function AdminDashboardPage({
 
       <section aria-labelledby="qa-h" className="mt-8 rounded-2xl border border-teal-100 bg-white p-6 shadow-sm">
         <h2 id="qa-h" className="font-serif text-lg text-teal-900">Quick actions</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           {[
             { href: "/admin/courses/new", label: "Add a new course" },
             { href: "/admin/coupons", label: "Create a coupon" },
