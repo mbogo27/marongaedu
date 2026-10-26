@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main, v2-ecommerce]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: maronga
+          POSTGRES_PASSWORD: maronga
+          POSTGRES_DB: maronga_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U maronga"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      # Unit/integration tests (vitest) use TEST_DATABASE_URL; the app + E2E use the others.
+      TEST_DATABASE_URL: postgresql://maronga:maronga@localhost:5432/maronga_test
+      DATABASE_URL: postgresql://maronga:maronga@localhost:5432/maronga_test
+      E2E_DATABASE_URL: postgresql://maronga:maronga@localhost:5432/maronga_e2e
+      AUTH_SECRET: ci-secret-ci-secret-ci-secret-ci-secret-1234
+      APP_URL: http://localhost:3100
+      EMAIL_PROVIDER: console
+      STORAGE_PROVIDER: local
+      RATE_LIMIT_PROVIDER: db
+      PAYMENTS_MODE: simulated
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Create E2E database
+        run: PGPASSWORD=maronga psql -h localhost -U maronga -d postgres -c "create database maronga_e2e"
+      - run: npm run typecheck
+      - run: npm run lint
+      - name: Unit + integration tests
+        run: npm run test
+      - name: Build
+        run: npm run build
+      - name: Install Chrome for Playwright
+        run: npx playwright install --with-deps chrome
+      - name: End-to-end tests
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

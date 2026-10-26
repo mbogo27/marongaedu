@@ -57,7 +57,10 @@ describe("passwords", () => {
   it("flags common passwords from the shipped 10k list", () => {
     expect(isCommonPassword("password")).toBe(true);
     expect(isCommonPassword("PASSWORD")).toBe(true);
+    expect(isCommonPassword("password1234")).toBe(true); // common word + digits
+    expect(isCommonPassword("Dragon2020!")).toBe(true);
     expect(isCommonPassword("xK9#mQ2!vL7$wZ")).toBe(false);
+    expect(isCommonPassword("correct horse battery staple")).toBe(false);
   });
   it("scores strength sensibly", () => {
     expect(passwordStrength("").score).toBe(0);
