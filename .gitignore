@@ -50,3 +50,10 @@ next-env.d.ts
 
 # Claude Code local settings (machine-specific)
 .claude/settings.local.json
+
+# local storage + test artifacts
+/.storage/
+/.storage-test/
+/test-results/
+/playwright-report/
+/blob-report/

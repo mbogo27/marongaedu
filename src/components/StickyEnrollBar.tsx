@@ -4,19 +4,22 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { formatKes } from "@/lib/format";
 import { enrollAction } from "@/lib/actions/courses";
+import type { EnrollmentGate } from "@/lib/domain/enrollment-rules";
+
+const LABEL = { sold_out: "Sold out", closed: "Enrollment closed", not_open: "Opens soon" } as const;
 
 export default function StickyEnrollBar({
   slug,
   title,
   isFree,
   effectivePriceKes,
-  isEnrolled,
+  gate,
 }: {
   slug: string;
   title: string;
   isFree: boolean;
   effectivePriceKes: number;
-  isEnrolled: boolean;
+  gate: EnrollmentGate;
 }) {
   const [visible, setVisible] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -24,9 +27,7 @@ export default function StickyEnrollBar({
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el) return;
-    const observer = new IntersectionObserver(([entry]) => setVisible(!entry.isIntersecting), {
-      rootMargin: "-64px 0px 0px 0px",
-    });
+    const observer = new IntersectionObserver(([entry]) => setVisible(!entry.isIntersecting), { rootMargin: "-64px 0px 0px 0px" });
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
@@ -39,18 +40,20 @@ export default function StickyEnrollBar({
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-ink">{title}</p>
-              <p className="text-sm font-semibold text-teal-700">{isFree ? "Free" : formatKes(effectivePriceKes)}</p>
+              <p className="text-sm font-semibold text-teal-800">{isFree || effectivePriceKes === 0 ? "Free" : formatKes(effectivePriceKes)}</p>
             </div>
-            {isEnrolled ? (
+            {gate === "enrolled" ? (
               <Link href={`/learn/${slug}`} className="shrink-0 rounded-full bg-teal-700 px-4 py-2 text-sm font-semibold text-white">
                 Go to course
               </Link>
-            ) : (
+            ) : gate === "open" ? (
               <form action={enrollAction.bind(null, slug)} className="shrink-0">
                 <button type="submit" className="rounded-full bg-gold-500 px-4 py-2 text-sm font-semibold text-teal-900">
                   Enroll now
                 </button>
               </form>
+            ) : (
+              <span className="shrink-0 rounded-full bg-ink/10 px-4 py-2 text-sm font-semibold text-ink/70">{LABEL[gate]}</span>
             )}
           </div>
         </div>

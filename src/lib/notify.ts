@@ -1,34 +1,27 @@
 import "server-only";
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 
 export type NotificationType =
   | "signup"
+  | "email_verified"
   | "enrollment"
   | "payment_received"
   | "payment_failed"
+  | "refund"
   | "review"
   | "contact_submission"
   | "course_completed"
-  | "certificate_issued";
+  | "certificate_issued"
+  | "email"
+  | "email_failed"
+  | "security";
 
 /**
- * Stub notification/email layer. Real providers (Resend/Postmark/Africa's
- * Talking, etc.) would replace the console.log below; the admin feed always
- * reads from the Notification table either way.
+ * Admin notifications feed (`/admin/notifications`). Emails go through
+ * `sendEmail` (src/lib/email/send.ts); this table records platform events
+ * for the instructor regardless of which email provider is configured.
  */
-export async function notify(type: NotificationType, payload: Record<string, unknown>) {
-  await db.notification.create({
-    data: { type, payload: JSON.stringify(payload) },
-  });
-  console.log(`[notify:${type}]`, payload);
-}
-
-export async function sendStubEmail(to: string, subject: string, body: string) {
-  console.log(`[email stub] to=${to} subject="${subject}"\n${body}`);
-  await db.notification.create({
-    data: {
-      type: "email",
-      payload: JSON.stringify({ to, subject, body }),
-    },
-  });
+export async function notify(type: NotificationType, payload: Prisma.InputJsonObject) {
+  await db.notification.create({ data: { type, payload } });
 }

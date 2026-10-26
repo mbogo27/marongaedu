@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Lora, Inter } from "next/font/google";
 import "./globals.css";
+import { env } from "@/lib/env";
+import { getSetting } from "@/lib/settings";
 
 const lora = Lora({
   variable: "--font-serif",
@@ -12,15 +14,19 @@ const inter = Inter({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
-  title: {
-    default: "Maronga | Authoritative Dental Education",
-    template: "%s | Maronga Dental Academy",
-  },
-  description:
-    "Practical, practitioner-led dental courses from Dr. Maronga — built for students and clinicians across Kenya.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const general = await getSetting("general");
+  return {
+    metadataBase: new URL(env.APP_URL),
+    title: {
+      default: `${general.siteName} | ${general.tagline}`,
+      template: `%s | ${general.siteName}`,
+    },
+    description: general.tagline,
+    openGraph: { siteName: general.siteName, type: "website" },
+    ...(general.faviconUrl ? { icons: { icon: general.faviconUrl } } : {}),
+  };
+}
 
 export default function RootLayout({
   children,
@@ -28,13 +34,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${lora.variable} ${inter.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col bg-paper text-ink font-sans">
-        {children}
-      </body>
+    <html lang="en" className={`${lora.variable} ${inter.variable} h-full antialiased`}>
+      <body className="min-h-full flex flex-col bg-paper text-ink font-sans">{children}</body>
     </html>
   );
 }

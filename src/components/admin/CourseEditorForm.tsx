@@ -1,134 +1,230 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { saveCourseAction, type SaveState } from "@/lib/actions/admin/courses";
+import { saveCourseAction } from "@/lib/actions/admin/courses";
+import { publishChecklist, type CoursePayload, type EditorCoupon, type EditorInitial } from "@/lib/course-schema";
+import { slugify } from "@/lib/format";
 import DynamicListEditor from "./DynamicListEditor";
 import RichTextEditor from "./RichTextEditor";
-import CurriculumBuilder, { type EditableModule } from "./CurriculumBuilder";
+import FileUploadField from "./FileUploadField";
+import CurriculumBuilder from "./CurriculumBuilder";
 
 const TABS = ["basics", "media", "curriculum", "pricing", "seo", "settings"] as const;
 type Tab = (typeof TABS)[number];
 
-export type EditorCourse = {
-  id: string;
-  title: string;
-  slug: string;
-  subtitle: string | null;
-  categoryId: string;
-  level: string;
-  language: string;
-  priceKes: number;
-  salePriceKes: number | null;
-  saleEndsAt: string | null;
-  isFree: boolean;
-  shortDescription: string;
-  description: string;
-  thumbnailUrl: string;
-  previewVideoUrl: string;
-  metaTitle: string | null;
-  metaDescription: string | null;
-  ogImageUrl: string | null;
-  isFeatured: boolean;
-  enrollmentCap: number | null;
-  enrollmentOpensAt: string | null;
-  enrollmentClosesAt: string | null;
-  status: string;
-  outcomes: string[];
-  requirements: string[];
-  audience: string[];
-  modules: EditableModule[];
-};
+const AUTOSAVE_MS = 3000;
+
+const input =
+  "mt-1 w-full rounded-lg border border-teal-200 bg-white px-4 py-2.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30";
+const label = "text-sm font-medium text-ink/80";
+const card = "space-y-5 rounded-2xl border border-teal-100 bg-white p-6";
+
+type SaveStatus = { kind: "idle" } | { kind: "saving" } | { kind: "saved"; at: Date } | { kind: "error"; message: string };
 
 export default function CourseEditorForm({
-  course,
+  initial,
   categories,
+  coupons,
 }: {
-  course?: EditorCourse;
+  initial: EditorInitial;
   categories: { id: string; name: string }[];
+  coupons: EditorCoupon[];
 }) {
-  const boundAction = saveCourseAction.bind(null, course?.id ?? null);
-  const [state, action, pending] = useActionState<SaveState, FormData>(boundAction, undefined);
-
   const [tab, setTab] = useState<Tab>("basics");
-  const [title, setTitle] = useState(course?.title ?? "");
-  const [slug, setSlug] = useState(course?.slug ?? "");
-  const [isFree, setIsFree] = useState(course?.isFree ?? false);
-  const [thumbnailUrl, setThumbnailUrl] = useState(course?.thumbnailUrl ?? "");
-  const [descriptionHtml, setDescriptionHtml] = useState(course?.description ?? "<p></p>");
-  const [outcomes, setOutcomes] = useState<string[]>(course?.outcomes ?? []);
-  const [requirements, setRequirements] = useState<string[]>(course?.requirements ?? []);
-  const [audience, setAudience] = useState<string[]>(course?.audience ?? []);
-  const [modules, setModules] = useState<EditableModule[]>(course?.modules ?? []);
+  const [data, setData] = useState<CoursePayload>(initial.payload);
+  const [courseId, setCourseId] = useState<string | null>(initial.id);
+  const [savedSlug, setSavedSlug] = useState(initial.slug);
+  const [status, setStatus] = useState(initial.status);
+  const [slugTouched, setSlugTouched] = useState(!!initial.id);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
+  const [message, setMessage] = useState<{ tone: "error" | "ok"; text: string } | null>(null);
+
+  const lastSaved = useRef(JSON.stringify(initial.payload));
+  const saving = useRef(false);
+  const queued = useRef<"autosave" | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latest = useRef(data);
+  latest.current = data;
+
+  const dirty = JSON.stringify(data) !== lastSaved.current;
+  const checklist = useMemo(() => publishChecklist(data), [data]);
+  const requiredMissing = checklist.filter((c) => c.required && !c.ok);
+
+  const patch = useCallback((p: Partial<CoursePayload>) => setData((d) => ({ ...d, ...p })), []);
+
+  const doSave = useCallback(
+    async (intent: "autosave" | "save" | "publish" | "unpublish") => {
+      if (saving.current) {
+        if (intent === "autosave") queued.current = "autosave";
+        return;
+      }
+      saving.current = true;
+      setSaveStatus({ kind: "saving" });
+      const snapshot = latest.current;
+      const payload = { ...snapshot, slug: snapshot.slug || slugify(snapshot.title) };
+      try {
+        const res = await saveCourseAction(courseId, payload, intent);
+        if (!res.ok) {
+          setSaveStatus({ kind: "error", message: res.error });
+          if (intent !== "autosave") setMessage({ tone: "error", text: res.error });
+          return;
+        }
+        setCourseId(res.course.id);
+        setSavedSlug(res.course.slug);
+        setStatus(res.course.status);
+        lastSaved.current = JSON.stringify(snapshot);
+        // Server may have adjusted the slug (uniqueness) or status (publish/unpublish).
+        setData((d) => ({ ...d, slug: res.course.slug, status: res.course.status }));
+        lastSaved.current = JSON.stringify({ ...snapshot, slug: res.course.slug, status: res.course.status });
+        setSaveStatus({ kind: "saved", at: new Date() });
+        if (intent !== "autosave") {
+          setMessage({ tone: "ok", text: intent === "publish" ? "Published. The course is live." : intent === "unpublish" ? "Unpublished." : "Saved." });
+        }
+        if (typeof window !== "undefined" && window.location.pathname !== `/admin/courses/${res.course.slug}`) {
+          window.history.replaceState(null, "", `/admin/courses/${res.course.slug}`);
+        }
+      } catch {
+        setSaveStatus({ kind: "error", message: "Could not save. Check your connection." });
+      } finally {
+        saving.current = false;
+        if (queued.current) {
+          queued.current = null;
+          void doSave("autosave");
+        }
+      }
+    },
+    [courseId]
+  );
+
+  // Debounced autosave (drafts only get created once there's a title + category).
+  useEffect(() => {
+    if (!dirty || !data.title.trim() || !data.categoryId) return;
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => void doSave("autosave"), AUTOSAVE_MS);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [data, dirty, doSave]);
+
+  // "Unsaved changes" guard: tab close/reload, and in-app link clicks.
+  useEffect(() => {
+    if (!dirty) return;
+    const beforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    const onClick = (e: MouseEvent) => {
+      const a = (e.target as HTMLElement).closest("a[href]") as HTMLAnchorElement | null;
+      if (!a || a.target === "_blank" || a.origin !== window.location.origin) return;
+      if (!window.confirm("You have unsaved changes. Leave this page anyway?")) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    document.addEventListener("click", onClick, true);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      document.removeEventListener("click", onClick, true);
+    };
+  }, [dirty]);
+
+  const published = status === "PUBLISHED";
+  const hasCategory = categories.length > 0;
 
   return (
-    <form action={action} className="flex flex-col gap-6">
-      <input type="hidden" name="outcomesJson" value={JSON.stringify(outcomes)} readOnly />
-      <input type="hidden" name="requirementsJson" value={JSON.stringify(requirements)} readOnly />
-      <input type="hidden" name="audienceJson" value={JSON.stringify(audience)} readOnly />
-      <input type="hidden" name="curriculumJson" value={JSON.stringify(modules)} readOnly />
-      <input type="hidden" name="descriptionHtml" value={descriptionHtml} readOnly />
-
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <Link href="/admin/courses" className="text-sm text-teal-700 hover:underline">
+          <Link href="/admin/courses" className="text-sm text-teal-800 underline-offset-2 hover:underline">
             ← All courses
           </Link>
-          <h1 className="mt-1 font-serif text-2xl text-teal-900">{course ? "Edit course" : "New course"}</h1>
+          <h1 className="mt-1 font-serif text-2xl text-teal-900">{courseId ? "Edit course" : "New course"}</h1>
         </div>
-        {course && (
-          <Link href={`/courses/${course.slug}`} target="_blank" className="rounded-full border border-teal-100 px-4 py-2 text-sm font-medium text-teal-700 hover:bg-teal-50">
-            Preview live page →
-          </Link>
-        )}
+        <div className="flex items-center gap-3">
+          <p role="status" aria-live="polite" className="text-xs text-ink/70">
+            {saveStatus.kind === "saving" && "Saving…"}
+            {saveStatus.kind === "saved" && `Saved ${saveStatus.at.toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" })}`}
+            {saveStatus.kind === "error" && <span className="text-red-700">{saveStatus.message}</span>}
+            {saveStatus.kind === "idle" && (dirty ? "Unsaved changes" : "")}
+            {saveStatus.kind === "saved" && dirty && " · unsaved changes"}
+          </p>
+          {courseId && (
+            <Link
+              href={`/courses/${savedSlug}`}
+              target="_blank"
+              className="rounded-full border border-teal-300 px-4 py-2 text-sm font-medium text-teal-800 hover:bg-teal-50"
+            >
+              Preview<span className="sr-only"> (opens in a new tab)</span> →
+            </Link>
+          )}
+        </div>
       </div>
 
-      <nav className="flex gap-1 overflow-x-auto rounded-full bg-teal-50 p-1 text-sm font-medium">
+      {!hasCategory && (
+        <p role="alert" className="rounded-xl bg-gold-50 px-4 py-3 text-sm text-gold-900">
+          Create at least one category under <Link className="underline" href="/admin/categories">Categories</Link> before saving a course.
+        </p>
+      )}
+
+      <div role="tablist" aria-label="Course sections" className="flex gap-1 overflow-x-auto rounded-full bg-teal-50 p-1 text-sm font-medium">
         {TABS.map((t) => (
           <button
             key={t}
+            role="tab"
+            id={`tab-${t}`}
+            aria-selected={tab === t}
+            aria-controls={`panel-${t}`}
             type="button"
             onClick={() => setTab(t)}
-            className={`shrink-0 rounded-full px-4 py-2 capitalize transition ${tab === t ? "bg-white text-teal-700 shadow-sm" : "text-ink/60"}`}
+            className={`shrink-0 rounded-full px-4 py-2 capitalize transition ${tab === t ? "bg-white text-teal-900 shadow-sm" : "text-ink/80 hover:text-ink"}`}
           >
             {t}
           </button>
         ))}
-      </nav>
+      </div>
 
-      <div className={tab === "basics" ? "" : "hidden"}>
-        <div className="space-y-5 rounded-2xl border border-teal-100 bg-white p-6">
+      {/* BASICS */}
+      <div role="tabpanel" id="panel-basics" aria-labelledby="tab-basics" hidden={tab !== "basics"}>
+        <div className={card}>
           <div className="grid gap-5 sm:grid-cols-2">
             <div>
-              <label className="text-sm font-medium text-ink/70">Title</label>
+              <label htmlFor="c-title" className={label}>Title</label>
               <input
-                name="title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                id="c-title"
+                value={data.title}
+                onChange={(e) => patch({ title: e.target.value, ...(slugTouched ? {} : { slug: slugify(e.target.value) }) })}
                 required
-                className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none"
+                className={input}
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-ink/70">Slug</label>
+              <label htmlFor="c-slug" className={label}>URL slug</label>
               <input
-                name="slug"
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                placeholder="auto-generated from title if left blank"
-                className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none"
+                id="c-slug"
+                value={data.slug}
+                onChange={(e) => {
+                  setSlugTouched(true);
+                  patch({ slug: slugify(e.target.value) });
+                }}
+                placeholder="auto-generated from the title"
+                className={input}
               />
+              {courseId && data.slug && data.slug !== savedSlug && (
+                <p className="mt-1 text-xs text-ink/70">The old URL will redirect to the new one.</p>
+              )}
             </div>
           </div>
           <div>
-            <label className="text-sm font-medium text-ink/70">Subtitle</label>
-            <input name="subtitle" defaultValue={course?.subtitle ?? ""} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+            <label htmlFor="c-sub" className={label}>Subtitle</label>
+            <input id="c-sub" value={data.subtitle} onChange={(e) => patch({ subtitle: e.target.value })} className={input} />
           </div>
           <div className="grid gap-5 sm:grid-cols-3">
             <div>
-              <label className="text-sm font-medium text-ink/70">Category</label>
-              <select name="categoryId" defaultValue={course?.categoryId} required className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none">
+              <label htmlFor="c-cat" className={label}>Category</label>
+              <select id="c-cat" value={data.categoryId} onChange={(e) => patch({ categoryId: e.target.value })} className={input}>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -137,8 +233,8 @@ export default function CourseEditorForm({
               </select>
             </div>
             <div>
-              <label className="text-sm font-medium text-ink/70">Level</label>
-              <select name="level" defaultValue={course?.level ?? "BEGINNER"} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none">
+              <label htmlFor="c-level" className={label}>Level</label>
+              <select id="c-level" value={data.level} onChange={(e) => patch({ level: e.target.value as CoursePayload["level"] })} className={input}>
                 <option value="BEGINNER">Beginner</option>
                 <option value="INTERMEDIATE">Intermediate</option>
                 <option value="ADVANCED">Advanced</option>
@@ -146,163 +242,239 @@ export default function CourseEditorForm({
               </select>
             </div>
             <div>
-              <label className="text-sm font-medium text-ink/70">Language</label>
-              <input name="language" defaultValue={course?.language ?? "English"} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+              <label htmlFor="c-lang" className={label}>Language</label>
+              <input id="c-lang" value={data.language} onChange={(e) => patch({ language: e.target.value })} className={input} />
             </div>
           </div>
           <div>
-            <label className="text-sm font-medium text-ink/70">Short description (~160 chars, used on cards)</label>
-            <textarea
-              name="shortDescription"
-              defaultValue={course?.shortDescription ?? ""}
-              maxLength={200}
-              rows={2}
-              required
-              className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none"
-            />
+            <label htmlFor="c-short" className={label}>Short description (~160 characters, used on cards)</label>
+            <textarea id="c-short" value={data.shortDescription} onChange={(e) => patch({ shortDescription: e.target.value })} maxLength={200} rows={2} className={input} />
+            <p className="mt-1 text-xs text-ink/70">{data.shortDescription.length}/200</p>
           </div>
           <div>
-            <label className="text-sm font-medium text-ink/70">Full description</label>
+            <span className={label}>Full description</span>
             <div className="mt-1">
-              <RichTextEditor content={descriptionHtml} onChange={setDescriptionHtml} />
+              <RichTextEditor content={data.description} onChange={(html) => patch({ description: html })} label="Course description" />
             </div>
           </div>
           <div className="grid gap-6 sm:grid-cols-3">
-            <DynamicListEditor label="What you'll learn" placeholder="Outcome" items={outcomes} onChange={setOutcomes} />
-            <DynamicListEditor label="Requirements" placeholder="Requirement" items={requirements} onChange={setRequirements} />
-            <DynamicListEditor label="Target audience" placeholder="Audience" items={audience} onChange={setAudience} />
+            <DynamicListEditor label="What you'll learn" placeholder="Outcome" items={data.outcomes} onChange={(outcomes) => patch({ outcomes })} />
+            <DynamicListEditor label="Requirements" placeholder="Requirement" items={data.requirements} onChange={(requirements) => patch({ requirements })} />
+            <DynamicListEditor label="Target audience" placeholder="Audience" items={data.audience} onChange={(audience) => patch({ audience })} />
           </div>
         </div>
       </div>
 
-      <div className={tab === "media" ? "" : "hidden"}>
-        <div className="grid gap-6 rounded-2xl border border-teal-100 bg-white p-6 sm:grid-cols-2">
+      {/* MEDIA */}
+      <div role="tabpanel" id="panel-media" aria-labelledby="tab-media" hidden={tab !== "media"}>
+        <div className={`${card} grid gap-6 sm:grid-cols-2`}>
           <div>
-            <label className="text-sm font-medium text-ink/70">Thumbnail (1280×720 recommended)</label>
+            <span className={label}>Thumbnail (1280×720 recommended)</span>
             <div className="relative mt-1 aspect-video w-full overflow-hidden rounded-xl border border-teal-100 bg-teal-50">
-              {thumbnailUrl && <Image src={thumbnailUrl} alt="" fill className="object-cover" unoptimized={thumbnailUrl.startsWith("/uploads")} />}
+              {data.thumbnailUrl && <Image src={data.thumbnailUrl} alt="Current thumbnail" fill sizes="480px" className="object-cover" unoptimized={data.thumbnailUrl.startsWith("/media")} />}
             </div>
-            <input
-              name="thumbnailUrl"
-              value={thumbnailUrl}
-              onChange={(e) => setThumbnailUrl(e.target.value)}
-              placeholder="https://..."
-              className="mt-2 w-full rounded-lg border border-teal-100 px-4 py-2 text-sm focus:border-teal-400 focus:outline-none"
-            />
-            <label className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-teal-200 px-4 py-2.5 text-sm font-medium text-teal-700 hover:bg-teal-50">
-              <input type="file" name="thumbnailFile" accept="image/*" className="sr-only" />
-              Or upload a new thumbnail
-            </label>
+            <div className="mt-3">
+              <FileUploadField target="thumbnail" accept="image/jpeg,image/png,image/webp" label="Upload thumbnail" buttonText="Upload image" onUploaded={(f) => patch({ thumbnailUrl: f.url })} />
+            </div>
+            <label htmlFor="c-thumb-url" className="mt-3 block text-xs font-medium text-ink/80">Or paste an image URL</label>
+            <input id="c-thumb-url" value={data.thumbnailUrl} onChange={(e) => patch({ thumbnailUrl: e.target.value })} placeholder="https://…" className={input} />
           </div>
           <div>
-            <label className="text-sm font-medium text-ink/70">Preview video URL</label>
-            <input
-              name="previewVideoUrl"
-              defaultValue={course?.previewVideoUrl ?? "/videos/placeholder-1.mp4"}
-              className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none"
-            />
-            <label className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-teal-200 px-4 py-2.5 text-sm font-medium text-teal-700 hover:bg-teal-50">
-              <input type="file" name="previewVideoFile" accept="video/*" className="sr-only" />
-              Or upload a video file
-            </label>
-            <p className="mt-2 text-xs text-ink/40">Leave as a placeholder path to reuse the demo clip pool in public/videos.</p>
+            <span className={label}>Intro video</span>
+            <p className="mt-1 text-xs text-ink/70">Shown on the course page. Upload an MP4 or paste a YouTube / Vimeo link.</p>
+            <div className="mt-3">
+              <FileUploadField target="previewVideo" accept="video/mp4,video/webm" label="Upload intro video" buttonText="Upload video" onUploaded={(f) => patch({ previewVideoUrl: f.url })} />
+            </div>
+            <label htmlFor="c-prev-url" className="mt-3 block text-xs font-medium text-ink/80">Video URL</label>
+            <input id="c-prev-url" value={data.previewVideoUrl} onChange={(e) => patch({ previewVideoUrl: e.target.value })} placeholder="https://… or /media/public/…" className={input} />
           </div>
         </div>
       </div>
 
-      <div className={tab === "curriculum" ? "" : "hidden"}>
+      {/* CURRICULUM */}
+      <div role="tabpanel" id="panel-curriculum" aria-labelledby="tab-curriculum" hidden={tab !== "curriculum"}>
         <div className="rounded-2xl border border-teal-100 bg-white p-6">
-          <CurriculumBuilder modules={modules} onChange={setModules} />
+          <CurriculumBuilder modules={data.modules} onChange={(modules) => patch({ modules })} />
         </div>
       </div>
 
-      <div className={tab === "pricing" ? "" : "hidden"}>
-        <div className="space-y-5 rounded-2xl border border-teal-100 bg-white p-6">
+      {/* PRICING */}
+      <div role="tabpanel" id="panel-pricing" aria-labelledby="tab-pricing" hidden={tab !== "pricing"}>
+        <div className={card}>
           <label className="flex items-center gap-2 text-sm font-medium text-ink/80">
-            <input type="checkbox" name="isFree" checked={isFree} onChange={(e) => setIsFree(e.target.checked)} className="h-4 w-4 rounded border-teal-300 text-teal-600" />
+            <input type="checkbox" checked={data.isFree} onChange={(e) => patch({ isFree: e.target.checked })} className="h-4 w-4 rounded border-teal-300 text-teal-700" />
             This course is free
           </label>
-          {!isFree && (
+          {!data.isFree && (
             <div className="grid gap-5 sm:grid-cols-3">
               <div>
-                <label className="text-sm font-medium text-ink/70">Price (KES)</label>
-                <input name="priceKes" type="number" min={0} defaultValue={course?.priceKes ?? 0} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+                <label htmlFor="c-price" className={label}>Price (KES)</label>
+                <input id="c-price" type="number" min={0} value={data.priceKes} onChange={(e) => patch({ priceKes: Math.max(0, Math.round(Number(e.target.value) || 0)) })} className={input} />
               </div>
               <div>
-                <label className="text-sm font-medium text-ink/70">Sale price (KES, optional)</label>
-                <input name="salePriceKes" type="number" min={0} defaultValue={course?.salePriceKes ?? ""} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+                <label htmlFor="c-sale" className={label}>Sale price (KES, optional)</label>
+                <input
+                  id="c-sale"
+                  type="number"
+                  min={0}
+                  value={data.salePriceKes ?? ""}
+                  onChange={(e) => patch({ salePriceKes: e.target.value === "" ? null : Math.max(0, Math.round(Number(e.target.value))) })}
+                  className={input}
+                />
               </div>
               <div>
-                <label className="text-sm font-medium text-ink/70">Sale ends</label>
-                <input name="saleEndsAt" type="date" defaultValue={course?.saleEndsAt?.slice(0, 10) ?? ""} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+                <label htmlFor="c-sale-end" className={label}>Sale ends</label>
+                <input id="c-sale-end" type="date" value={data.saleEndsAt?.slice(0, 10) ?? ""} onChange={(e) => patch({ saleEndsAt: e.target.value || null })} className={input} />
               </div>
             </div>
           )}
+          <fieldset>
+            <legend className={label}>Applicable coupons</legend>
+            <p className="mt-1 text-xs text-ink/70">Coupons restricted to specific courses can be switched on for this course here. Coupons with no restriction already apply everywhere.</p>
+            <ul className="mt-3 space-y-2">
+              {coupons.length === 0 && <li className="text-xs text-ink/70">No coupons yet. Create one under Coupons.</li>}
+              {coupons.map((c) => (
+                <li key={c.id}>
+                  <label className="flex items-center gap-2 text-sm text-ink/80">
+                    <input
+                      type="checkbox"
+                      disabled={!c.restricted}
+                      checked={!c.restricted || data.couponIds.includes(c.id)}
+                      onChange={(e) => patch({ couponIds: e.target.checked ? [...data.couponIds, c.id] : data.couponIds.filter((x) => x !== c.id) })}
+                    />
+                    <span className="font-mono text-xs">{c.code}</span>
+                    <span className="text-xs text-ink/70">{c.restricted ? c.description : `${c.description} · applies to all courses`}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </fieldset>
         </div>
       </div>
 
-      <div className={tab === "seo" ? "" : "hidden"}>
-        <div className="space-y-5 rounded-2xl border border-teal-100 bg-white p-6">
+      {/* SEO */}
+      <div role="tabpanel" id="panel-seo" aria-labelledby="tab-seo" hidden={tab !== "seo"}>
+        <div className={card}>
           <div>
-            <label className="text-sm font-medium text-ink/70">Meta title</label>
-            <input name="metaTitle" defaultValue={course?.metaTitle ?? ""} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+            <label htmlFor="c-mt" className={label}>Meta title</label>
+            <input id="c-mt" value={data.metaTitle} onChange={(e) => patch({ metaTitle: e.target.value })} maxLength={200} className={input} />
           </div>
           <div>
-            <label className="text-sm font-medium text-ink/70">Meta description</label>
-            <textarea name="metaDescription" defaultValue={course?.metaDescription ?? ""} rows={2} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+            <label htmlFor="c-md" className={label}>Meta description</label>
+            <textarea id="c-md" value={data.metaDescription} onChange={(e) => patch({ metaDescription: e.target.value })} rows={2} maxLength={400} className={input} />
           </div>
           <div>
-            <label className="text-sm font-medium text-ink/70">OG image URL (defaults to thumbnail)</label>
-            <input name="ogImageUrl" defaultValue={course?.ogImageUrl ?? ""} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+            <span className={label}>Social share image (defaults to the thumbnail)</span>
+            <div className="mt-2">
+              <FileUploadField target="ogImage" accept="image/jpeg,image/png,image/webp" label="Upload share image" buttonText="Upload image" current={data.ogImageUrl || undefined} onUploaded={(f) => patch({ ogImageUrl: f.url })} />
+            </div>
+            <input aria-label="Share image URL" value={data.ogImageUrl} onChange={(e) => patch({ ogImageUrl: e.target.value })} placeholder="https://…" className={input} />
           </div>
         </div>
       </div>
 
-      <div className={tab === "settings" ? "" : "hidden"}>
-        <div className="space-y-5 rounded-2xl border border-teal-100 bg-white p-6">
+      {/* SETTINGS */}
+      <div role="tabpanel" id="panel-settings" aria-labelledby="tab-settings" hidden={tab !== "settings"}>
+        <div className={card}>
+          <div className="grid gap-5 sm:grid-cols-3">
+            <div>
+              <label htmlFor="c-status" className={label}>Status</label>
+              <select id="c-status" value={data.status} onChange={(e) => patch({ status: e.target.value as CoursePayload["status"] })} className={input}>
+                <option value="DRAFT">Draft</option>
+                <option value="PUBLISHED">Published</option>
+                <option value="ARCHIVED">Archived</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="c-cert" className={label}>Certificate template</label>
+              <select id="c-cert" value={data.certificateTemplate} onChange={(e) => patch({ certificateTemplate: e.target.value })} className={input}>
+                <option value="default">Default (edit under Settings → Certificates)</option>
+              </select>
+            </div>
+          </div>
           <label className="flex items-center gap-2 text-sm font-medium text-ink/80">
-            <input type="checkbox" name="isFeatured" defaultChecked={course?.isFeatured} className="h-4 w-4 rounded border-teal-300 text-teal-600" />
-            Featured on homepage
+            <input type="checkbox" checked={data.isFeatured} onChange={(e) => patch({ isFeatured: e.target.checked })} className="h-4 w-4 rounded border-teal-300 text-teal-700" />
+            Featured on the homepage
+          </label>
+          <label className="flex items-start gap-2 text-sm font-medium text-ink/80">
+            <input type="checkbox" checked={data.requireSequential} onChange={(e) => patch({ requireSequential: e.target.checked })} className="mt-0.5 h-4 w-4 rounded border-teal-300 text-teal-700" />
+            <span>
+              Require lessons in order
+              <span className="block text-xs font-normal text-ink/70">Each lesson stays locked until the previous one is complete (quizzes must be passed).</span>
+            </span>
           </label>
           <div className="grid gap-5 sm:grid-cols-3">
             <div>
-              <label className="text-sm font-medium text-ink/70">Enrollment cap (optional)</label>
-              <input name="enrollmentCap" type="number" min={1} defaultValue={course?.enrollmentCap ?? ""} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+              <label htmlFor="c-cap" className={label}>Enrollment cap (optional)</label>
+              <input id="c-cap" type="number" min={1} value={data.enrollmentCap ?? ""} onChange={(e) => patch({ enrollmentCap: e.target.value === "" ? null : Math.max(1, Math.round(Number(e.target.value))) })} className={input} />
             </div>
             <div>
-              <label className="text-sm font-medium text-ink/70">Enrollment opens</label>
-              <input name="enrollmentOpensAt" type="date" defaultValue={course?.enrollmentOpensAt?.slice(0, 10) ?? ""} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+              <label htmlFor="c-open" className={label}>Enrollment opens</label>
+              <input id="c-open" type="date" value={data.enrollmentOpensAt?.slice(0, 10) ?? ""} onChange={(e) => patch({ enrollmentOpensAt: e.target.value || null })} className={input} />
             </div>
             <div>
-              <label className="text-sm font-medium text-ink/70">Enrollment closes</label>
-              <input name="enrollmentClosesAt" type="date" defaultValue={course?.enrollmentClosesAt?.slice(0, 10) ?? ""} className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none" />
+              <label htmlFor="c-close" className={label}>Enrollment closes</label>
+              <input id="c-close" type="date" value={data.enrollmentClosesAt?.slice(0, 10) ?? ""} onChange={(e) => patch({ enrollmentClosesAt: e.target.value || null })} className={input} />
             </div>
           </div>
         </div>
       </div>
 
-      {state?.error && <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{state.error}</p>}
+      <section aria-labelledby="checklist-h" className="rounded-2xl border border-teal-100 bg-white p-5">
+        <h2 id="checklist-h" className="font-serif text-lg text-teal-900">Publish checklist</h2>
+        <ul className="mt-3 grid gap-x-6 gap-y-1 sm:grid-cols-2">
+          {checklist.map((c) => (
+            <li key={c.id} className="flex items-center gap-2 text-sm">
+              <span aria-hidden="true" className={c.ok ? "text-teal-700" : c.required ? "text-red-700" : "text-gold-700"}>
+                {c.ok ? "✓" : c.required ? "✗" : "!"}
+              </span>
+              <span className={c.ok ? "text-ink/80" : "text-ink"}>
+                {c.label}
+                {!c.ok && !c.required && <span className="text-xs text-ink/70"> (recommended)</span>}
+                <span className="sr-only">{c.ok ? " — done" : c.required ? " — required, missing" : " — recommended"}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
 
-      <div className="flex items-center gap-4">
+      {message && (
+        <p role={message.tone === "error" ? "alert" : "status"} className={`rounded-xl px-4 py-3 text-sm ${message.tone === "error" ? "bg-red-50 text-red-800" : "bg-teal-50 text-teal-900"}`}>
+          {message.text}
+        </p>
+      )}
+
+      <div className="sticky bottom-0 -mx-2 flex flex-wrap items-center gap-3 border-t border-teal-100 bg-white/95 px-2 py-3 backdrop-blur">
         <button
-          type="submit"
-          name="status"
-          value="DRAFT"
-          disabled={pending}
-          className="rounded-full border border-teal-200 px-6 py-2.5 text-sm font-semibold text-teal-700 transition hover:bg-teal-50 disabled:opacity-60"
+          type="button"
+          disabled={!hasCategory || !data.title.trim() || saveStatus.kind === "saving"}
+          onClick={() => void doSave("save")}
+          className="rounded-full border border-teal-300 px-6 py-2.5 text-sm font-semibold text-teal-800 hover:bg-teal-50 disabled:opacity-60"
         >
-          Save draft
+          {published ? "Save changes" : "Save draft"}
         </button>
-        <button
-          type="submit"
-          name="status"
-          value="PUBLISHED"
-          disabled={pending}
-          className="rounded-full bg-teal-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-60"
-        >
-          {pending ? "Saving…" : "Publish"}
-        </button>
+        {published ? (
+          <button
+            type="button"
+            disabled={saveStatus.kind === "saving"}
+            onClick={() => void doSave("unpublish")}
+            className="rounded-full border border-gold-500 px-6 py-2.5 text-sm font-semibold text-gold-900 hover:bg-gold-50 disabled:opacity-60"
+          >
+            Unpublish
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={!hasCategory || requiredMissing.length > 0 || saveStatus.kind === "saving"}
+            onClick={() => void doSave("publish")}
+            className="rounded-full bg-teal-700 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-teal-800 disabled:opacity-60"
+            title={requiredMissing.length ? `Missing: ${requiredMissing.map((m) => m.label).join(", ")}` : undefined}
+          >
+            Publish
+          </button>
+        )}
+        {!published && requiredMissing.length > 0 && <span className="text-xs text-ink/70">Complete the required checklist items to publish.</span>}
       </div>
-    </form>
+    </div>
   );
 }

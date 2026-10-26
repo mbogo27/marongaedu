@@ -1,42 +1,46 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import CheckoutForm from "@/components/CheckoutForm";
 import { requireUser } from "@/lib/dal";
 import { db } from "@/lib/db";
-import { effectivePrice } from "@/lib/queries";
-import { getSetting, type PaymentSettings } from "@/lib/settings";
+import { effectivePrice } from "@/lib/domain/pricing";
+import { getEnrollmentGate } from "@/lib/enrollment";
+import { getUsdRate } from "@/lib/settings";
+import { isSimulatedPayments } from "@/lib/payments";
+
+export const metadata: Metadata = { title: "Checkout", robots: { index: false } };
 
 export default async function CheckoutPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const user = await requireUser();
+  const user = await requireUser(`/checkout/${slug}`);
 
-  const course = await db.course.findUnique({ where: { slug } });
+  const course = await db.course.findFirst({ where: { slug, status: "PUBLISHED", deletedAt: null } });
   if (!course) notFound();
-  if (course.isFree) redirect(`/courses/${slug}`);
+  if (effectivePrice(course) === 0) redirect(`/courses/${slug}`);
 
-  const existing = await db.enrollment.findUnique({
-    where: { userId_courseId: { userId: user.id, courseId: course.id } },
-  });
-  if (existing) redirect(`/learn/${slug}`);
+  const gate = await getEnrollmentGate(course, user.id);
+  if (gate === "enrolled") redirect(`/learn/${slug}`);
+  if (gate !== "open") redirect(`/courses/${slug}`);
 
-  const payments = await getSetting<PaymentSettings>("payments");
+  const usdRate = await getUsdRate();
 
   return (
     <>
       <SiteHeader />
-      <main className="flex-1">
-        <div className="mx-auto max-w-4xl px-6 py-10">
+      <main id="main" className="flex-1">
+        <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
           <h1 className="font-serif text-3xl text-teal-900">Checkout</h1>
-          <p className="mt-2 text-ink/70">You&apos;re enrolling in {course.title}.</p>
+          <p className="mt-2 text-ink/80">You&apos;re enrolling in {course.title}.</p>
           <div className="mt-8">
             <CheckoutForm
               slug={course.slug}
-              courseId={course.id}
               title={course.title}
               thumbnailUrl={course.thumbnailUrl}
               priceKes={effectivePrice(course)}
-              usdRate={payments.usdKesRate}
+              usdRate={usdRate}
+              simulated={isSimulatedPayments()}
             />
           </div>
         </div>

@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { logoutAction } from "@/lib/actions/auth";
 
-export default function UserMenu({ name, avatarUrl }: { name: string; avatarUrl?: string | null }) {
+export default function UserMenu({ name, avatarUrl, isAdmin }: { name: string; avatarUrl?: string | null; isAdmin?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -22,6 +22,8 @@ export default function UserMenu({ name, avatarUrl }: { name: string; avatarUrl?
     <div ref={ref} className="relative">
       <button
         type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-2 rounded-full border border-teal-100 py-1 pl-1 pr-3 text-sm font-medium text-ink/80 hover:bg-teal-50"
       >
@@ -37,10 +39,15 @@ export default function UserMenu({ name, avatarUrl }: { name: string; avatarUrl?
       </button>
       {open && (
         <div className="absolute right-0 mt-2 w-48 overflow-hidden rounded-xl border border-teal-100 bg-white py-1 shadow-lg">
+          {isAdmin && (
+            <Link href="/admin" className="block px-4 py-2 text-sm font-medium text-teal-800 hover:bg-teal-50" onClick={() => setOpen(false)}>
+              Admin
+            </Link>
+          )}
           <Link href="/dashboard" className="block px-4 py-2 text-sm text-ink/80 hover:bg-teal-50" onClick={() => setOpen(false)}>
             Dashboard
           </Link>
-          <Link href="/dashboard?tab=account" className="block px-4 py-2 text-sm text-ink/80 hover:bg-teal-50" onClick={() => setOpen(false)}>
+          <Link href="/account" className="block px-4 py-2 text-sm text-ink/80 hover:bg-teal-50" onClick={() => setOpen(false)}>
             Account
           </Link>
           <form action={logoutAction}>

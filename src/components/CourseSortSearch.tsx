@@ -28,6 +28,7 @@ export default function CourseSortSearch() {
   return (
     <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <form
+        role="search"
         onSubmit={(e) => {
           e.preventDefault();
           updateParam("search", search);
@@ -38,17 +39,18 @@ export default function CourseSortSearch() {
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search courses, topics, lessons..."
-          className="w-full rounded-full border border-teal-100 bg-white px-4 py-2 text-sm focus:border-teal-400 focus:outline-none"
+          placeholder="Search courses, topics, lessons…" aria-label="Search courses"
+          className="w-full rounded-full border border-teal-200 bg-white px-4 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/40"
         />
-        <button type="submit" className="rounded-full bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700">
+        <button type="submit" className="rounded-full bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800">
           Search
         </button>
       </form>
 
-      <label className="flex items-center gap-2 text-sm text-ink/70">
+      <label className="flex items-center gap-2 text-sm text-ink/80">
         Sort by
         <select
+          aria-label="Sort courses"
           value={searchParams.get("sort") ?? "popular"}
           onChange={(e) => updateParam("sort", e.target.value)}
           className="rounded-lg border border-teal-100 px-3 py-2 text-sm"

@@ -1,33 +1,66 @@
 @import "tailwindcss";
 
+/*
+ * Brand: deep teal + gold on warm off-white. Full 50–950 scales are defined so
+ * every utility the UI uses (e.g. bg-gold-50, text-teal-800) resolves to a
+ * brand colour. Text colours were chosen to meet WCAG 2.1 AA (4.5:1) on white
+ * and on --paper.
+ */
 :root {
   --paper: #faf7f2;
   --ink: #1c2624;
+
   --teal-50: #eef5f4;
   --teal-100: #d3e6e4;
+  --teal-200: #a9cdca;
+  --teal-300: #7fb4b0;
   --teal-400: #2f8784;
+  --teal-500: #1a7b79;
   --teal-600: #0f6e6e;
   --teal-700: #0b5454;
+  --teal-800: #094646;
   --teal-900: #0a3a3a;
+  --teal-950: #062828;
+
+  --gold-50: #fdf8ec;
+  --gold-100: #faefd0;
+  --gold-200: #f5e0a8;
   --gold-300: #f0cf8a;
   --gold-400: #e3b85f;
   --gold-500: #d6a23c;
   --gold-600: #b9842a;
+  --gold-700: #96691d;
+  --gold-800: #7a5518;
+  --gold-900: #5f4212;
 }
 
 @theme inline {
   --color-paper: var(--paper);
   --color-ink: var(--ink);
+
   --color-teal-50: var(--teal-50);
   --color-teal-100: var(--teal-100);
+  --color-teal-200: var(--teal-200);
+  --color-teal-300: var(--teal-300);
   --color-teal-400: var(--teal-400);
+  --color-teal-500: var(--teal-500);
   --color-teal-600: var(--teal-600);
   --color-teal-700: var(--teal-700);
+  --color-teal-800: var(--teal-800);
   --color-teal-900: var(--teal-900);
+  --color-teal-950: var(--teal-950);
+
+  --color-gold-50: var(--gold-50);
+  --color-gold-100: var(--gold-100);
+  --color-gold-200: var(--gold-200);
   --color-gold-300: var(--gold-300);
   --color-gold-400: var(--gold-400);
   --color-gold-500: var(--gold-500);
   --color-gold-600: var(--gold-600);
+  --color-gold-700: var(--gold-700);
+  --color-gold-800: var(--gold-800);
+  --color-gold-900: var(--gold-900);
+
   --font-sans: var(--font-sans);
   --font-serif: var(--font-serif);
 }
@@ -39,4 +72,19 @@ body {
 
 h1, h2, h3, h4 {
   font-family: var(--font-serif);
+}
+
+/* Visible keyboard focus everywhere (WCAG 2.4.7). */
+:focus-visible {
+  outline: 2px solid var(--teal-600);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

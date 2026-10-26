@@ -1,47 +1,39 @@
 "use client";
 
-import { use, useActionState } from "react";
+import { useActionState } from "react";
 import { resetPasswordAction, type AuthFormState } from "@/lib/actions/auth";
+import { Field, FormMessage, primaryButtonClass } from "@/components/ui/Field";
+import { PASSWORD_MIN_LENGTH } from "@/lib/password-policy";
 
-export default function ResetPasswordForm({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
+export default function ResetPasswordForm({ token }: { token: string }) {
   const [state, action, pending] = useActionState<AuthFormState, FormData>(resetPasswordAction, undefined);
-  const { token } = use(searchParams);
 
   return (
     <div className="w-full max-w-md rounded-2xl border border-teal-100 bg-white p-8 shadow-sm">
       <h1 className="font-serif text-2xl text-teal-900">Set a new password</h1>
-      <form action={action} className="mt-6 flex flex-col gap-4">
-        <input type="hidden" name="token" value={token ?? ""} />
-        <div>
-          <label htmlFor="password" className="text-sm font-medium text-ink/70">
-            New password
-          </label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            required
-            className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-400"
-          />
-        </div>
-        <div>
-          <label htmlFor="confirmPassword" className="text-sm font-medium text-ink/70">
-            Confirm new password
-          </label>
-          <input
-            id="confirmPassword"
-            name="confirmPassword"
-            type="password"
-            required
-            className="mt-1 w-full rounded-lg border border-teal-100 px-4 py-2.5 text-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-400"
-          />
-        </div>
-        {state?.error && <p className="text-sm text-red-600">{state.error}</p>}
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-full bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-60"
-        >
+      <p className="mt-1 text-sm text-ink/70">You&apos;ll be signed out everywhere and asked to log in again.</p>
+      <form action={action} className="mt-6 flex flex-col gap-4" noValidate>
+        <input type="hidden" name="token" value={token} />
+        <Field
+          label="New password"
+          name="password"
+          type="password"
+          autoComplete="new-password"
+          required
+          minLength={PASSWORD_MIN_LENGTH}
+          error={state?.fieldErrors?.password?.[0]}
+          hint={`At least ${PASSWORD_MIN_LENGTH} characters.`}
+        />
+        <Field
+          label="Confirm new password"
+          name="confirmPassword"
+          type="password"
+          autoComplete="new-password"
+          required
+          error={state?.fieldErrors?.confirmPassword?.[0]}
+        />
+        <FormMessage error={state?.error} />
+        <button type="submit" disabled={pending} className={primaryButtonClass}>
           {pending ? "Saving…" : "Reset password"}
         </button>
       </form>

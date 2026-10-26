@@ -1,56 +1,99 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { jwtVerify } from "jose";
+import { REMEMBER_DAYS, REMEMBER_PREFIX, SESSION_COOKIE } from "@/lib/session-constants";
 
-const SESSION_COOKIE = "maronga_session";
+/**
+ * Optimistic redirects + per-request CSP nonce.
+ *
+ * Auth: the session cookie is an opaque token, so all we can cheaply check
+ * here is *presence*. The real session/role/enrollment checks happen in
+ * src/lib/dal.ts on every page, action and route handler (spec §0.4). Never
+ * rely on this file for security.
+ *
+ * CSP: nonce-based (see node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md).
+ * Every page is dynamically rendered (the header reads the session cookie), so
+ * nonces work app-wide.
+ */
+const LEARNER_PROTECTED_PREFIXES = ["/dashboard", "/learn", "/checkout", "/account", "/certificates"];
 
-const ADMIN_PREFIX = "/admin";
-const ADMIN_PUBLIC = new Set(["/admin/login"]);
-const LEARNER_PROTECTED_PREFIXES = ["/dashboard", "/learn", "/checkout", "/certificates"];
-const AUTH_PAGES = new Set(["/login", "/signup"]);
-
-async function readRole(req: NextRequest): Promise<"LEARNER" | "ADMIN" | null> {
-  const token = req.cookies.get(SESSION_COOKIE)?.value;
-  if (!token) return null;
-  const secret = process.env.SESSION_SECRET;
-  if (!secret) return null;
+function origin(value: string | undefined): string | null {
+  if (!value) return null;
   try {
-    const { payload } = await jwtVerify(token, new TextEncoder().encode(secret), {
-      algorithms: ["HS256"],
-    });
-    return (payload.role as "LEARNER" | "ADMIN") ?? null;
+    return new URL(value).origin;
   } catch {
     return null;
   }
 }
 
-// Optimistic redirects only — real authorization happens in src/lib/dal.ts
-// against the database, per Next.js's documented auth guidance.
-export async function proxy(req: NextRequest) {
+function buildCsp(nonce: string): string {
+  const isDev = process.env.NODE_ENV === "development";
+  // Storage hosts the browser talks to directly (presigned uploads, signed media, public assets).
+  const storage = [origin(process.env.S3_ENDPOINT), origin(process.env.S3_PUBLIC_BASE_URL)].filter(Boolean) as string[];
+  const bucketHosts = storage.join(" ");
+  const turnstile = process.env.TURNSTILE_ENABLED === "true" ? "https://challenges.cloudflare.com" : "";
+
+  const directives = [
+    `default-src 'self'`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
+    // Inline style="" attributes (progress bars etc.) need 'unsafe-inline' for attributes only; <style> blocks are nonced.
+    `style-src 'self' ${isDev ? "'unsafe-inline'" : `'nonce-${nonce}'`}`,
+    `style-src-attr 'unsafe-inline'`,
+    `img-src 'self' blob: data: https://picsum.photos ${bucketHosts}`.trim(),
+    `media-src 'self' blob: ${bucketHosts}`.trim(),
+    `font-src 'self' data:`,
+    `connect-src 'self' ${bucketHosts} ${turnstile}${isDev ? " ws: wss:" : ""}`.replace(/\s+/g, " ").trim(),
+    `frame-src https://www.youtube-nocookie.com https://player.vimeo.com ${turnstile}`.trim(),
+    `object-src 'none'`,
+    `base-uri 'self'`,
+    `form-action 'self'`,
+    `frame-ancestors 'none'`,
+  ];
+  if (!isDev) directives.push("upgrade-insecure-requests");
+  return directives.join("; ");
+}
+
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const role = await readRole(req);
+  const cookie = req.cookies.get(SESSION_COOKIE)?.value;
 
-  if (pathname.startsWith(ADMIN_PREFIX) && !ADMIN_PUBLIC.has(pathname)) {
-    if (role !== "ADMIN") {
-      return NextResponse.redirect(new URL("/admin/login", req.url));
-    }
+  if (!cookie && LEARNER_PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    const url = new URL("/login", req.url);
+    url.searchParams.set("redirect", pathname + req.nextUrl.search);
+    return NextResponse.redirect(url);
   }
 
-  if (LEARNER_PROTECTED_PREFIXES.some((p) => pathname.startsWith(p))) {
-    if (!role) {
-      const redirectUrl = new URL("/login", req.url);
-      redirectUrl.searchParams.set("redirect", pathname);
-      return NextResponse.redirect(redirectUrl);
-    }
-  }
+  const nonce = btoa(crypto.randomUUID());
+  const csp = buildCsp(nonce);
+  const headers = new Headers(req.headers);
+  headers.set("x-nonce", nonce);
+  headers.set("Content-Security-Policy", csp);
 
-  if (AUTH_PAGES.has(pathname) && role) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
-  }
+  const res = NextResponse.next({ request: { headers } });
+  res.headers.set("Content-Security-Policy", csp);
 
-  return NextResponse.next();
+  // Sliding persistence for "Remember me": keep pushing the cookie's expiry out
+  // (the DB session slides in dal.ts). Browser-session cookies are left alone.
+  if (cookie?.startsWith(REMEMBER_PREFIX)) {
+    res.cookies.set(SESSION_COOKIE, cookie, {
+      httpOnly: true,
+      secure: req.nextUrl.protocol === "https:",
+      sameSite: "lax",
+      path: "/",
+      maxAge: REMEMBER_DAYS * 86_400,
+    });
+  }
+  return res;
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|videos|captions|uploads).*)"],
+  matcher: [
+    {
+      // Pages only: skip API routes, media, static assets and prefetches.
+      source: "/((?!api|media|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|mp4|vtt|txt|xml)$).*)",
+      missing: [
+        { type: "header", key: "next-router-prefetch" },
+        { type: "header", key: "purpose", value: "prefetch" },
+      ],
+    },
+  ],
 };

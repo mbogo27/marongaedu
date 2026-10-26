@@ -11,8 +11,8 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
-const videosDir = path.join(root, "public", "videos");
-const captionsDir = path.join(root, "public", "captions");
+const videosDir = path.join(root, "assets", "placeholder", "videos");
+const captionsDir = path.join(root, "assets", "placeholder", "captions");
 
 mkdirSync(videosDir, { recursive: true });
 mkdirSync(captionsDir, { recursive: true });

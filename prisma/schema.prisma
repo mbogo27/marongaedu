@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 // ---------- Enums ----------
@@ -11,6 +11,12 @@ datasource db {
 enum Role {
   LEARNER
   ADMIN
+  // INSTRUCTOR can be added later (multi-instructor extensibility, spec v1 §9).
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
 }
 
 enum Level {
@@ -46,6 +52,11 @@ enum EnrollmentSource {
   COUPON
 }
 
+enum EnrollmentStatus {
+  ACTIVE
+  REVOKED
+}
+
 enum PaymentMethod {
   MPESA
   CARD
@@ -57,6 +68,7 @@ enum PaymentStatus {
   PENDING
   SUCCESS
   FAILED
+  CANCELLED
   REFUNDED
 }
 
@@ -77,50 +89,114 @@ enum ContactStatus {
   REPLIED
 }
 
-// ---------- Core ----------
+enum TokenPurpose {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+  CHANGE_EMAIL
+  ADMIN_INVITE
+  NEWSLETTER_OPTIN
+}
+
+enum EmailStatus {
+  SENT
+  FAILED
+  SKIPPED
+}
+
+// ---------- Identity ----------
 
 model User {
-  id            String   @id @default(cuid())
-  name          String
-  email         String   @unique
-  passwordHash  String
-  role          Role     @default(LEARNER)
-  avatarUrl     String?
-  bio           String?
-  isGoogleStub  Boolean  @default(false)
-  verifiedAt    DateTime?
-  verifyToken   String?
-  resetToken    String?
-  resetTokenExpiresAt DateTime?
-  notifyEmail   Boolean  @default(true)
-  notifyMarketing Boolean @default(true)
-  suspendedAt   DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  deletedAt     DateTime?
+  id                String     @id @default(cuid())
+  name              String
+  email             String     @unique
+  role              Role       @default(LEARNER)
+  status            UserStatus @default(ACTIVE)
+  avatarUrl         String?
+  bio               String?
+  emailVerifiedAt   DateTime?  @db.Timestamptz
+  notificationPrefs Json       @default("{}")
+  lastLoginAt       DateTime?  @db.Timestamptz
+  createdAt         DateTime   @default(now()) @db.Timestamptz
+  updatedAt         DateTime   @updatedAt @db.Timestamptz
+  deletedAt         DateTime?  @db.Timestamptz
 
-  coursesTaught   Course[]         @relation("InstructorCourses")
+  accounts        Account[]
+  sessions        Session[]
+  tokens          VerificationToken[]
+  coursesTaught   Course[]            @relation("InstructorCourses")
   enrollments     Enrollment[]
   reviews         Review[]
+  reviewVotes     ReviewVote[]
   payments        Payment[]
   wishlist        Wishlist[]
   notes           LessonNote[]
-  sessions        Session[]
   couponUsages    CouponUsage[]
-  adminNotes      StudentNote[]    @relation("StudentNoteSubject")
-  authoredNotes   StudentNote[]    @relation("StudentNoteAuthor")
-  activityLogs    ActivityLog[]
+  quizAttempts    QuizAttempt[]
+  comments        LessonComment[]
+  adminNotes      StudentNote[]       @relation("StudentNoteSubject")
+  authoredNotes   StudentNote[]       @relation("StudentNoteAuthor")
+
+  @@index([role])
+  @@index([createdAt])
+}
+
+/// One row per sign-in method. Email/password is providerId "credential"
+/// (providerAccountId = userId, passwordHash set); Google would be "google"
+/// with the Google subject id and no passwordHash (spec §3.10).
+model Account {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  providerId        String
+  providerAccountId String
+  passwordHash      String?
+  createdAt         DateTime @default(now()) @db.Timestamptz
+
+  @@unique([providerId, providerAccountId])
+  @@index([userId])
 }
 
 model Session {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  lastSeenAt DateTime @default(now())
-  expiresAt DateTime
-  userAgent String?
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash    String   @unique
+  remember     Boolean  @default(false)
+  expiresAt    DateTime @db.Timestamptz
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now()) @db.Timestamptz
+  lastActiveAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([userId])
+  @@index([expiresAt])
 }
+
+model VerificationToken {
+  id         String       @id @default(cuid())
+  userId     String?
+  user       User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  identifier String // email address the token was issued for
+  purpose    TokenPurpose
+  tokenHash  String       @unique
+  expiresAt  DateTime     @db.Timestamptz
+  usedAt     DateTime?    @db.Timestamptz
+  meta       Json?
+  createdAt  DateTime     @default(now()) @db.Timestamptz
+
+  @@index([userId, purpose])
+  @@index([identifier, purpose])
+}
+
+model RateLimit {
+  key         String   @id
+  count       Int
+  windowStart DateTime @db.Timestamptz
+
+  @@index([windowStart])
+}
+
+// ---------- Catalog ----------
 
 model Category {
   id          String   @id @default(cuid())
@@ -133,36 +209,38 @@ model Category {
 }
 
 model Course {
-  id            String    @id @default(cuid())
-  title         String
-  slug          String    @unique
-  subtitle      String?
-  description   String    // TipTap JSON string
-  shortDescription String
-  categoryId    String
-  category      Category  @relation(fields: [categoryId], references: [id])
-  instructorId  String
-  instructor    User      @relation("InstructorCourses", fields: [instructorId], references: [id])
-  level         Level
-  language      String    @default("English")
-  priceKes      Int       @default(0)
-  salePriceKes  Int?
-  saleEndsAt    DateTime?
-  isFree        Boolean   @default(false)
-  thumbnailUrl  String
-  previewVideoUrl String
-  status        CourseStatus @default(DRAFT)
-  isFeatured    Boolean   @default(false)
-  enrollmentCap Int?
-  enrollmentOpensAt  DateTime?
-  enrollmentClosesAt DateTime?
-  metaTitle     String?
-  metaDescription String?
-  ogImageUrl    String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  publishedAt   DateTime?
-  deletedAt     DateTime?
+  id                 String       @id @default(cuid())
+  title              String
+  slug               String       @unique
+  subtitle           String?
+  description        String // sanitized HTML
+  shortDescription   String
+  categoryId         String
+  category           Category     @relation(fields: [categoryId], references: [id])
+  instructorId       String
+  instructor         User         @relation("InstructorCourses", fields: [instructorId], references: [id])
+  level              Level
+  language           String       @default("English")
+  priceKes           Int          @default(0)
+  salePriceKes       Int?
+  saleEndsAt         DateTime?    @db.Timestamptz
+  isFree             Boolean      @default(false)
+  thumbnailUrl       String       @default("")
+  previewVideoUrl    String       @default("")
+  status             CourseStatus @default(DRAFT)
+  isFeatured         Boolean      @default(false)
+  requireSequential  Boolean      @default(false)
+  enrollmentCap      Int?
+  enrollmentOpensAt  DateTime?    @db.Timestamptz
+  enrollmentClosesAt DateTime?    @db.Timestamptz
+  certificateTemplate String      @default("default")
+  metaTitle          String?
+  metaDescription    String?
+  ogImageUrl         String?
+  createdAt          DateTime     @default(now()) @db.Timestamptz
+  updatedAt          DateTime     @updatedAt @db.Timestamptz
+  publishedAt        DateTime?    @db.Timestamptz
+  deletedAt          DateTime?    @db.Timestamptz
 
   outcomes      CourseOutcome[]
   requirements  CourseRequirement[]
@@ -173,6 +251,19 @@ model Course {
   payments      Payment[]
   wishlist      Wishlist[]
   couponCourses CouponCourse[]
+  slugRedirects SlugRedirect[]
+
+  @@index([categoryId])
+  @@index([instructorId])
+  @@index([status, deletedAt])
+}
+
+model SlugRedirect {
+  fromSlug String @id
+  courseId String
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([courseId])
 }
 
 model CourseOutcome {
@@ -181,6 +272,8 @@ model CourseOutcome {
   course    Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
   text      String
   sortOrder Int    @default(0)
+
+  @@index([courseId])
 }
 
 model CourseRequirement {
@@ -189,6 +282,8 @@ model CourseRequirement {
   course    Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
   text      String
   sortOrder Int    @default(0)
+
+  @@index([courseId])
 }
 
 model CourseAudience {
@@ -197,6 +292,8 @@ model CourseAudience {
   course    Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
   text      String
   sortOrder Int    @default(0)
+
+  @@index([courseId])
 }
 
 model Module {
@@ -207,22 +304,30 @@ model Module {
   description String?
   sortOrder   Int      @default(0)
   lessons     Lesson[]
+
+  @@index([courseId])
 }
 
 model Lesson {
-  id             String     @id @default(cuid())
-  moduleId       String
-  module         Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  title          String
-  type           LessonType
-  durationSeconds Int       @default(0)
-  content        String     // JSON string, shape varies by type
-  isFreePreview  Boolean    @default(false)
-  sortOrder      Int        @default(0)
+  id              String     @id @default(cuid())
+  moduleId        String
+  module          Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title           String
+  type            LessonType
+  durationSeconds Int        @default(0)
+  /// Shape varies by type — see src/lib/content-types.ts
+  content         Json       @default("{}")
+  passMark        Int        @default(70) // quiz lessons only
+  isFreePreview   Boolean    @default(false)
+  sortOrder       Int        @default(0)
 
-  quizQuestions  QuizQuestion[]
-  progress       LessonProgress[]
-  notes          LessonNote[]
+  quizQuestions QuizQuestion[]
+  progress      LessonProgress[]
+  notes         LessonNote[]
+  attempts      QuizAttempt[]
+  comments      LessonComment[]
+
+  @@index([moduleId])
 }
 
 model QuizQuestion {
@@ -234,6 +339,8 @@ model QuizQuestion {
   explanation String?
   sortOrder   Int          @default(0)
   options     QuizOption[]
+
+  @@index([lessonId])
 }
 
 model QuizOption {
@@ -243,27 +350,33 @@ model QuizOption {
   text       String
   isCorrect  Boolean      @default(false)
   sortOrder  Int          @default(0)
+
+  @@index([questionId])
 }
 
 // ---------- Enrollment / progress ----------
 
 model Enrollment {
-  id              String   @id @default(cuid())
+  id              String           @id @default(cuid())
   userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   courseId        String
-  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  enrolledAt      DateTime @default(now())
-  completedAt     DateTime?
-  progressPercent Int      @default(0)
+  course          Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  status          EnrollmentStatus @default(ACTIVE)
+  enrolledAt      DateTime         @default(now()) @db.Timestamptz
+  completedAt     DateTime?        @db.Timestamptz
+  revokedAt       DateTime?        @db.Timestamptz
+  progressPercent Int              @default(0)
   lastLessonId    String?
   source          EnrollmentSource
 
-  lessonProgress  LessonProgress[]
-  payment         Payment?
-  certificate     Certificate?
+  lessonProgress LessonProgress[]
+  quizAttempts   QuizAttempt[]
+  payments       Payment[]
+  certificate    Certificate?
 
   @@unique([userId, courseId])
+  @@index([courseId])
 }
 
 model LessonProgress {
@@ -273,11 +386,31 @@ model LessonProgress {
   lessonId            String
   lesson              Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   completed           Boolean    @default(false)
+  completedAt         DateTime?  @db.Timestamptz
   lastPositionSeconds Int        @default(0)
-  quizScorePercent    Int?
-  updatedAt           DateTime   @updatedAt
+  bestScorePercent    Int?
+  updatedAt           DateTime   @updatedAt @db.Timestamptz
 
   @@unique([enrollmentId, lessonId])
+  @@index([lessonId])
+}
+
+model QuizAttempt {
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId     String
+  lesson       Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  answers      Json
+  scorePercent Int
+  passed       Boolean
+  createdAt    DateTime   @default(now()) @db.Timestamptz
+
+  @@index([enrollmentId, lessonId])
+  @@index([userId])
+  @@index([lessonId])
 }
 
 model LessonNote {
@@ -288,44 +421,105 @@ model LessonNote {
   lesson                Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   content               String
   videoTimestampSeconds Int?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt             DateTime @default(now()) @db.Timestamptz
+  updatedAt             DateTime @updatedAt @db.Timestamptz
+
+  @@index([userId, lessonId])
+  @@index([lessonId])
+}
+
+/// Per-lesson discussion (feature-flagged: FEATURE_DISCUSSIONS).
+model LessonComment {
+  id        String          @id @default(cuid())
+  lessonId  String
+  lesson    Lesson          @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    LessonComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   LessonComment[] @relation("CommentReplies")
+  body      String
+  hiddenAt  DateTime?       @db.Timestamptz
+  createdAt DateTime        @default(now()) @db.Timestamptz
+
+  @@index([lessonId])
+  @@index([userId])
+  @@index([parentId])
 }
 
 // ---------- Reviews ----------
 
 model Review {
-  id        String       @id @default(cuid())
-  userId    String
-  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  courseId  String
-  course    Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  rating    Int
-  text      String
-  status    ReviewStatus @default(PUBLISHED)
+  id              String       @id @default(cuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId        String
+  course          Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  rating          Int
+  text            String
+  status          ReviewStatus @default(PUBLISHED)
   instructorReply String?
-  createdAt DateTime     @default(now())
+  repliedAt       DateTime?    @db.Timestamptz
+  createdAt       DateTime     @default(now()) @db.Timestamptz
+  updatedAt       DateTime     @updatedAt @db.Timestamptz
+  deletedAt       DateTime?    @db.Timestamptz
+
+  votes ReviewVote[]
 
   @@unique([userId, courseId])
+  @@index([courseId, status])
+}
+
+model ReviewVote {
+  reviewId String
+  review   Review  @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  helpful  Boolean
+
+  @@id([reviewId, userId])
+  @@index([userId])
 }
 
 // ---------- Payments / coupons ----------
 
 model Payment {
-  id           String        @id @default(cuid())
-  userId       String
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  courseId     String
-  course       Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  enrollmentId String?       @unique
-  enrollment   Enrollment?   @relation(fields: [enrollmentId], references: [id])
-  amountKes    Int
-  method       PaymentMethod
-  status       PaymentStatus @default(PENDING)
-  reference    String?
-  payload      String?       // JSON string
-  couponCode   String?
-  createdAt    DateTime      @default(now())
+  id             String        @id @default(cuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId       String
+  course         Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  enrollmentId   String?
+  enrollment     Enrollment?   @relation(fields: [enrollmentId], references: [id])
+  idempotencyKey String        @unique
+  subtotalKes    Int           @default(0)
+  discountKes    Int           @default(0)
+  amountKes      Int
+  currency       String        @default("KES")
+  method         PaymentMethod
+  status         PaymentStatus @default(PENDING)
+  reference      String?
+  failureReason  String?
+  phone          String?
+  cardBrand      String?
+  cardLast4      String?
+  couponCode     String?
+  invoiceNumber  String?       @unique
+  /// Provider-specific data. Never contains full card numbers or CVV.
+  payload        Json?
+  createdAt      DateTime      @default(now()) @db.Timestamptz
+  updatedAt      DateTime      @updatedAt @db.Timestamptz
+  refundedAt     DateTime?     @db.Timestamptz
+
+  @@index([userId])
+  @@index([courseId])
+  @@index([enrollmentId])
+  @@index([status, createdAt])
+}
+
+model Sequence {
+  name  String @id
+  value Int    @default(0)
 }
 
 model Coupon {
@@ -335,13 +529,13 @@ model Coupon {
   discountValue Int
   usageLimit    Int?
   perUserLimit  Int?
-  startsAt      DateTime?
-  endsAt        DateTime?
+  startsAt      DateTime?    @db.Timestamptz
+  endsAt        DateTime?    @db.Timestamptz
   isActive      Boolean      @default(true)
-  createdAt     DateTime     @default(now())
+  createdAt     DateTime     @default(now()) @db.Timestamptz
 
-  courses       CouponCourse[]
-  usages        CouponUsage[]
+  courses CouponCourse[]
+  usages  CouponUsage[]
 }
 
 model CouponCourse {
@@ -351,6 +545,7 @@ model CouponCourse {
   course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   @@id([couponId, courseId])
+  @@index([courseId])
 }
 
 model CouponUsage {
@@ -360,25 +555,37 @@ model CouponUsage {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   paymentId String?
-  usedAt    DateTime @default(now())
+  usedAt    DateTime @default(now()) @db.Timestamptz
+
+  @@index([couponId])
+  @@index([userId])
 }
 
 model Wishlist {
   userId   String
-  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   courseId String
-  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  addedAt  DateTime @default(now())
+  course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  addedAt  DateTime @default(now()) @db.Timestamptz
 
   @@id([userId, courseId])
+  @@index([courseId])
 }
 
+// ---------- Certificates ----------
+
 model Certificate {
-  id           String     @id @default(cuid())
+  id           String     @id @default(uuid())
+  /// Short human code, e.g. DENT-7K3Q-9XPA — what /verify/:code takes.
+  code         String     @unique
   enrollmentId String     @unique
   enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  issuedAt     DateTime   @default(now())
+  issuedAt     DateTime   @default(now()) @db.Timestamptz
   templateId   String     @default("default")
+  /// Frozen at issue time: learnerName, courseTitle, completedAt, instructorName.
+  snapshot     Json
+  pdfKey       String?
+  revokedAt    DateTime?  @db.Timestamptz
 }
 
 // ---------- Site content / ops ----------
@@ -390,26 +597,40 @@ model ContactSubmission {
   subject   String
   message   String
   status    ContactStatus @default(NEW)
-  createdAt DateTime      @default(now())
+  createdAt DateTime      @default(now()) @db.Timestamptz
+
+  @@index([status])
 }
 
 model Subscriber {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  createdAt DateTime @default(now())
+  id               String    @id @default(cuid())
+  email            String    @unique
+  confirmedAt      DateTime? @db.Timestamptz
+  unsubscribedAt   DateTime? @db.Timestamptz
+  unsubscribeToken String    @unique @default(cuid())
+  createdAt        DateTime  @default(now()) @db.Timestamptz
+}
+
+model Faq {
+  id        String @id @default(cuid())
+  question  String
+  answer    String
+  sortOrder Int    @default(0)
 }
 
 model Notification {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   type      String
-  payload   String   // JSON string
-  readAt    DateTime?
-  createdAt DateTime @default(now())
+  payload   Json
+  readAt    DateTime? @db.Timestamptz
+  createdAt DateTime  @default(now()) @db.Timestamptz
+
+  @@index([createdAt])
 }
 
 model Setting {
   key   String @id
-  value String // JSON string
+  value Json
 }
 
 model StudentNote {
@@ -419,14 +640,40 @@ model StudentNote {
   authorId  String
   author    User     @relation("StudentNoteAuthor", fields: [authorId], references: [id], onDelete: Cascade)
   text      String
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([studentId])
+  @@index([authorId])
 }
 
-model ActivityLog {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  action    String
-  metadata  String?  // JSON string
-  createdAt DateTime @default(now())
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  targetType String?
+  targetId   String?
+  meta       Json?
+  ip         String?
+  createdAt  DateTime @default(now()) @db.Timestamptz
+
+  @@index([action])
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
+
+model EmailLog {
+  id                String      @id @default(cuid())
+  to                String
+  template          String
+  subject           String
+  status            EmailStatus
+  providerMessageId String?
+  error             String?
+  /// Only populated by the console provider so tests/dev can read links.
+  textBody          String?
+  createdAt         DateTime    @default(now()) @db.Timestamptz
+
+  @@index([to, createdAt])
+  @@index([status])
 }

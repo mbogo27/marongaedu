@@ -1,38 +1,54 @@
-import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/dal";
+import { getAdminOrNull } from "@/lib/dal";
 import { db } from "@/lib/db";
+import { streamCsv } from "@/lib/csv";
+import { enrollmentWhere } from "@/lib/admin/filters";
+import { audit } from "@/lib/audit";
 
-function csvEscape(value: string) {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
-}
+const BATCH = 500;
 
-export async function GET() {
-  await requireAdmin();
+// Route Handlers under (protected) are NOT covered by the layout guard, so check here.
+export async function GET(req: Request) {
+  const admin = await getAdminOrNull();
+  if (!admin) return new Response(null, { status: 404 });
 
-  const enrollments = await db.enrollment.findMany({
-    include: { user: true, course: true, payment: true },
-    orderBy: { enrolledAt: "desc" },
-  });
+  const q = Object.fromEntries(new URL(req.url).searchParams);
+  const where = enrollmentWhere(q);
 
-  const header = ["Student", "Email", "Course", "Enrolled At", "Progress %", "Completed At", "Method", "Amount KES"];
-  const rows = enrollments.map((e) => [
-    e.user.name,
-    e.user.email,
-    e.course.title,
-    e.enrolledAt.toISOString(),
-    String(e.progressPercent),
-    e.completedAt ? e.completedAt.toISOString() : "",
-    e.payment?.method ?? e.source,
-    String(e.payment?.amountKes ?? 0),
-  ]);
+  async function* batches() {
+    let cursor: string | undefined;
+    for (;;) {
+      const rows = await db.enrollment.findMany({
+        where,
+        take: BATCH,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+        orderBy: { id: "asc" },
+        include: {
+          user: { select: { name: true, email: true } },
+          course: { select: { title: true } },
+          payments: { where: { status: "SUCCESS" }, orderBy: { createdAt: "desc" }, take: 1 },
+        },
+      });
+      if (rows.length === 0) return;
+      cursor = rows[rows.length - 1].id;
+      yield rows.map((e) => [
+        e.user.name,
+        e.user.email,
+        e.course.title,
+        e.enrolledAt,
+        e.progressPercent,
+        e.completedAt ?? "",
+        e.payments[0]?.method ?? e.source,
+        e.payments[0]?.amountKes ?? 0,
+        e.status,
+      ]);
+      if (rows.length < BATCH) return;
+    }
+  }
 
-  const csv = [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
-
-  return new NextResponse(csv, {
-    headers: {
-      "Content-Type": "text/csv",
-      "Content-Disposition": `attachment; filename="enrollments-${new Date().toISOString().slice(0, 10)}.csv"`,
-    },
-  });
+  await audit({ actorId: admin.id, action: "export.enrollments", meta: q });
+  return streamCsv(
+    ["Student", "Email", "Course", "Enrolled At", "Progress %", "Completed At", "Method", "Amount KES", "Status"],
+    batches(),
+    `enrollments-${new Date().toISOString().slice(0, 10)}.csv`
+  );
 }

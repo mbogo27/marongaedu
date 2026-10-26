@@ -1,7 +1,7 @@
-import { db } from "@/lib/db";
 import CourseEditorForm from "@/components/admin/CourseEditorForm";
+import { loadEditorData } from "@/lib/admin/editor-data";
 
 export default async function NewCoursePage() {
-  const categories = await db.category.findMany({ orderBy: { name: "asc" } });
-  return <CourseEditorForm categories={categories} />;
+  const data = await loadEditorData(null);
+  return <CourseEditorForm key="new" {...data!} />;
 }

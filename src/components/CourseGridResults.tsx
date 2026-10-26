@@ -21,14 +21,14 @@ export default function CourseGridResults({
     return (
       <div className="rounded-2xl border border-dashed border-teal-200 bg-white px-6 py-16 text-center">
         <p className="font-serif text-xl text-teal-900">No courses match your filters</p>
-        <p className="mt-2 text-sm text-ink/60">Try widening your search or clearing a filter.</p>
+        <p className="mt-2 text-sm text-ink/80">Try widening your search or clearing a filter.</p>
       </div>
     );
   }
 
   return (
     <div>
-      <p className="mb-4 text-sm text-ink/50">{total} course{total === 1 ? "" : "s"}</p>
+      <p className="mb-4 text-sm text-ink/70" role="status">{total} course{total === 1 ? "" : "s"}</p>
       <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
         {courses.map((course) => (
           <CourseCard key={course.id} course={course} />

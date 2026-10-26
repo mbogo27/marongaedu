@@ -1,0 +1,23 @@
+# Local PostgreSQL for development and E2E tests.
+#   docker compose up -d
+#   DATABASE_URL=postgresql://maronga:maronga@localhost:5432/maronga
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: maronga
+      POSTGRES_PASSWORD: maronga
+      POSTGRES_DB: maronga
+    ports:
+      - "5432:5432"
+    volumes:
+      - maronga-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maronga -d maronga"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  maronga-pgdata:

@@ -4,8 +4,6 @@ const TABS = [
   { key: "courses", label: "My Courses" },
   { key: "wishlist", label: "Wishlist" },
   { key: "certificates", label: "Certificates" },
-  { key: "purchases", label: "Purchase History" },
-  { key: "account", label: "Account" },
 ];
 
 export default function DashboardNav({ active }: { active: string }) {
@@ -16,12 +14,15 @@ export default function DashboardNav({ active }: { active: string }) {
           key={tab.key}
           href={`/dashboard?tab=${tab.key}`}
           className={`shrink-0 rounded-full px-4 py-2 transition ${
-            active === tab.key ? "bg-white text-teal-700 shadow-sm" : "text-ink/60 hover:text-ink"
+            active === tab.key ? "bg-white text-teal-700 shadow-sm" : "text-ink/70 hover:text-ink"
           }`}
         >
           {tab.label}
         </Link>
       ))}
+      <Link href="/account" className="shrink-0 rounded-full px-4 py-2 text-ink/70 transition hover:text-ink">
+        Account &amp; purchases
+      </Link>
     </nav>
   );
 }

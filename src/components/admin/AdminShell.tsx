@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { adminLogoutAction } from "@/lib/actions/auth";
+import { logoutAction } from "@/lib/actions/auth";
 
 const navItems = [
   { href: "/admin", label: "Dashboard", exact: true },
@@ -15,15 +15,19 @@ const navItems = [
   { href: "/admin/reviews", label: "Reviews" },
   { href: "/admin/messages", label: "Messages" },
   { href: "/admin/notifications", label: "Notifications" },
+  { href: "/admin/faqs", label: "FAQs" },
+  { href: "/admin/audit", label: "Audit log" },
   { href: "/admin/settings", label: "Settings" },
 ];
 
 export default function AdminShell({
   children,
   adminName,
+  siteName,
 }: {
   children: React.ReactNode;
   adminName: string;
+  siteName: string;
 }) {
   const pathname = usePathname();
 
@@ -32,11 +36,11 @@ export default function AdminShell({
       <aside className="hidden w-64 shrink-0 flex-col border-r border-teal-100 bg-white px-5 py-6 md:flex">
         <Link href="/admin" className="flex items-center gap-2 px-2">
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-600 font-serif text-lg text-paper">
-            M
+            {siteName.charAt(0)}
           </span>
           <div>
-            <p className="font-serif text-lg leading-tight text-teal-900">Maronga</p>
-            <p className="text-xs text-ink/50">Admin back office</p>
+            <p className="font-serif text-lg leading-tight text-teal-900">{siteName}</p>
+            <p className="text-xs text-ink/70">Admin back office</p>
           </div>
         </Link>
 
@@ -64,8 +68,8 @@ export default function AdminShell({
           <Link href="/" className="rounded-lg px-3 py-2 font-medium text-ink/70 hover:bg-teal-50">
             ← View live site
           </Link>
-          <form action={adminLogoutAction}>
-            <button type="submit" className="w-full rounded-lg px-3 py-2 text-left font-medium text-ink/50 hover:bg-teal-50">
+          <form action={logoutAction}>
+            <button type="submit" className="w-full rounded-lg px-3 py-2 text-left font-medium text-ink/70 hover:bg-teal-50">
               Log out
             </button>
           </form>
@@ -76,9 +80,9 @@ export default function AdminShell({
         <header className="flex items-center justify-between border-b border-teal-100 bg-white px-6 py-4 md:hidden">
           <Link href="/admin" className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-600 font-serif text-paper">
-              M
+              {siteName.charAt(0)}
             </span>
-            <span className="font-serif text-lg text-teal-900">Maronga Admin</span>
+            <span className="font-serif text-lg text-teal-900">{siteName} Admin</span>
           </Link>
           <Link href="/" className="text-sm font-medium text-teal-600">
             View site
@@ -91,14 +95,14 @@ export default function AdminShell({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`shrink-0 rounded-full px-3 py-1.5 ${active ? "bg-teal-600 text-white" : "text-ink/60"}`}
+                className={`shrink-0 rounded-full px-3 py-1.5 ${active ? "bg-teal-600 text-white" : "text-ink/70"}`}
               >
                 {item.label}
               </Link>
             );
           })}
         </nav>
-        <main className="px-6 py-8 md:px-10">{children}</main>
+        <main id="main" className="px-4 py-8 sm:px-6 md:px-10">{children}</main>
       </div>
     </div>
   );

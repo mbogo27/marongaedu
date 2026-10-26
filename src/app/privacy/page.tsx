@@ -1,7 +1,7 @@
 import LegalPageLayout from "@/components/LegalPageLayout";
-import { getSetting, type LegalSettings } from "@/lib/settings";
+import { getSetting } from "@/lib/settings";
 
 export default async function PrivacyPage() {
-  const legal = await getSetting<LegalSettings>("legal");
+  const legal = await getSetting("legal");
   return <LegalPageLayout title="Privacy Policy" html={legal.privacy} />;
 }

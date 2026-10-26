@@ -6,12 +6,13 @@ export function formatKes(amount: number) {
   }).format(amount);
 }
 
-export function formatUsd(amountKes: number, rate = Number(process.env.USD_KES_RATE ?? 129)) {
+/** Display-only conversion; charges are always KES. `rate` is KES per 1 USD from Settings. */
+export function formatUsd(amountKes: number, rate: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 0,
-  }).format(amountKes / rate);
+  }).format(amountKes / (rate > 0 ? rate : 129));
 }
 
 export function formatDate(date: Date | string) {

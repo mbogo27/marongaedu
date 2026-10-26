@@ -1,93 +1,129 @@
 import { db } from "@/lib/db";
 import { formatKes, formatDate } from "@/lib/format";
+import { paymentWhere } from "@/lib/admin/filters";
 import { refundPaymentAction } from "@/lib/actions/admin/payments";
+import ConfirmAction from "@/components/admin/ConfirmAction";
+import { Badge, PageHeader, Pager, dangerBtn, filterButton, filterInput, statusTone, tableWrap, td, th } from "@/components/admin/ui";
+
+const PER_PAGE = 25;
 
 export default async function AdminPaymentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; method?: string }>;
+  searchParams: Promise<{ status?: string; method?: string; from?: string; to?: string; q?: string; page?: string }>;
 }) {
-  const { status, method } = await searchParams;
+  const sp = await searchParams;
+  const page = Math.max(1, Number(sp.page) || 1);
+  const where = paymentWhere(sp);
 
-  const payments = await db.payment.findMany({
-    where: {
-      ...(status ? { status: status as never } : {}),
-      ...(method ? { method: method as never } : {}),
-    },
-    include: { user: true, course: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const [total, payments, sums] = await Promise.all([
+    db.payment.count({ where }),
+    db.payment.findMany({
+      where,
+      include: { user: { select: { name: true } }, course: { select: { title: true } } },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * PER_PAGE,
+      take: PER_PAGE,
+    }),
+    db.payment.aggregate({ where: { ...where, status: "SUCCESS" }, _sum: { amountKes: true } }),
+  ]);
+  const exportQs = new URLSearchParams(Object.entries(sp).filter(([k, v]) => v && k !== "page") as [string, string][]).toString();
 
   return (
     <div>
-      <h1 className="font-serif text-2xl text-teal-900">Payments</h1>
-      <form className="mt-4 flex flex-wrap gap-3">
-        <select name="status" defaultValue={status ?? ""} className="rounded-lg border border-teal-100 px-3 py-2 text-sm">
-          <option value="">All statuses</option>
-          <option value="SUCCESS">Success</option>
-          <option value="FAILED">Failed</option>
-          <option value="PENDING">Pending</option>
-          <option value="REFUNDED">Refunded</option>
-        </select>
-        <select name="method" defaultValue={method ?? ""} className="rounded-lg border border-teal-100 px-3 py-2 text-sm">
-          <option value="">All methods</option>
-          <option value="MPESA">M-Pesa</option>
-          <option value="CARD">Card</option>
-          <option value="FREE">Free</option>
-          <option value="MANUAL">Manual</option>
-        </select>
-        <button type="submit" className="rounded-lg bg-teal-100 px-4 py-2 text-sm font-medium text-teal-700">
-          Filter
-        </button>
+      <PageHeader
+        title="Payments"
+        actions={
+          <a href={`/admin/payments/export${exportQs ? `?${exportQs}` : ""}`} className="rounded-full border border-teal-300 px-4 py-2 text-sm font-medium text-teal-800 hover:bg-teal-50">
+            Export CSV
+          </a>
+        }
+      />
+      <p className="mt-1 text-sm text-ink/70">{total} transactions · {formatKes(sums._sum.amountKes ?? 0)} successful in this view</p>
+
+      <form className="mt-4 flex flex-wrap items-end gap-3" role="search" aria-label="Filter payments">
+        <label className="text-xs text-ink/80">
+          Search
+          <input name="q" defaultValue={sp.q} placeholder="Student, course, reference…" className={`${filterInput} mt-1 block`} />
+        </label>
+        <label className="text-xs text-ink/80">
+          Status
+          <select name="status" defaultValue={sp.status ?? ""} className={`${filterInput} mt-1 block`}>
+            <option value="">All statuses</option>
+            {["SUCCESS", "FAILED", "PENDING", "CANCELLED", "REFUNDED"].map((s) => (
+              <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-ink/80">
+          Method
+          <select name="method" defaultValue={sp.method ?? ""} className={`${filterInput} mt-1 block`}>
+            <option value="">All methods</option>
+            <option value="MPESA">M-Pesa</option>
+            <option value="CARD">Card</option>
+            <option value="FREE">Free</option>
+            <option value="MANUAL">Manual</option>
+          </select>
+        </label>
+        <label className="text-xs text-ink/80">
+          From
+          <input type="date" name="from" defaultValue={sp.from} className={`${filterInput} mt-1 block`} />
+        </label>
+        <label className="text-xs text-ink/80">
+          To
+          <input type="date" name="to" defaultValue={sp.to} className={`${filterInput} mt-1 block`} />
+        </label>
+        <button type="submit" className={filterButton}>Filter</button>
       </form>
 
-      <div className="mt-6 overflow-x-auto rounded-2xl border border-teal-100 bg-white">
-        <table className="w-full min-w-[900px] text-sm">
-          <thead className="border-b border-teal-100 text-left text-ink/50">
+      <div className={`mt-6 ${tableWrap}`}>
+        <table className="w-full min-w-[1000px] text-sm">
+          <caption className="sr-only">Payments</caption>
+          <thead className="border-b border-teal-100 text-left text-ink/70">
             <tr>
-              <th className="px-4 py-3 font-medium">Date</th>
-              <th className="px-4 py-3 font-medium">Student</th>
-              <th className="px-4 py-3 font-medium">Course</th>
-              <th className="px-4 py-3 font-medium">Amount</th>
-              <th className="px-4 py-3 font-medium">Method</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Reference</th>
-              <th className="px-4 py-3 font-medium">Actions</th>
+              <th scope="col" className={th}>Date</th>
+              <th scope="col" className={th}>Student</th>
+              <th scope="col" className={th}>Course</th>
+              <th scope="col" className={th}>Amount</th>
+              <th scope="col" className={th}>Method</th>
+              <th scope="col" className={th}>Status</th>
+              <th scope="col" className={th}>Reference</th>
+              <th scope="col" className={th}>Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-teal-50">
             {payments.map((p) => (
               <tr key={p.id}>
-                <td className="px-4 py-3 text-ink/40">{formatDate(p.createdAt)}</td>
-                <td className="px-4 py-3 text-ink">{p.user.name}</td>
-                <td className="px-4 py-3 text-ink/70">{p.course.title}</td>
-                <td className="px-4 py-3 text-ink/60">{formatKes(p.amountKes)}</td>
-                <td className="px-4 py-3 text-ink/60">{p.method}</td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      p.status === "SUCCESS" ? "bg-teal-50 text-teal-700" : p.status === "FAILED" ? "bg-red-50 text-red-600" : p.status === "REFUNDED" ? "bg-ink/5 text-ink/50" : "bg-gold-50 text-gold-700"
-                    }`}
-                  >
-                    {p.status}
-                  </span>
+                <td className={`${td} text-ink/70`}>{formatDate(p.createdAt)}</td>
+                <td className={`${td} text-ink`}>{p.user.name}</td>
+                <td className={`${td} text-ink/80`}>{p.course.title}</td>
+                <td className={`${td} text-ink/80`}>
+                  {formatKes(p.amountKes)}
+                  {p.discountKes > 0 && <span className="block text-xs text-ink/70">−{formatKes(p.discountKes)} {p.couponCode}</span>}
                 </td>
-                <td className="px-4 py-3 text-xs text-ink/40">{p.reference ?? "—"}</td>
-                <td className="px-4 py-3">
-                  {p.status === "SUCCESS" && (
-                    <form action={refundPaymentAction.bind(null, p.id)}>
-                      <button type="submit" className="text-xs font-medium text-red-500 hover:underline">
-                        Refund
-                      </button>
-                    </form>
+                <td className={`${td} text-ink/80`}>{p.method}</td>
+                <td className={td}>
+                  <Badge tone={statusTone(p.status)}>{p.status}</Badge>
+                  {p.failureReason && <span className="mt-1 block max-w-[10rem] text-xs text-ink/70">{p.failureReason}</span>}
+                </td>
+                <td className={`${td} text-xs text-ink/70`}>
+                  {p.reference ?? "—"}
+                  {p.invoiceNumber && <span className="block">{p.invoiceNumber}</span>}
+                </td>
+                <td className={td}>
+                  {p.status === "SUCCESS" && p.amountKes > 0 && (
+                    <ConfirmAction className={dangerBtn} confirm={`Refund ${formatKes(p.amountKes)} to ${p.user.name}? Their access to "${p.course.title}" is revoked.`} action={refundPaymentAction.bind(null, p.id)}>
+                      Refund
+                    </ConfirmAction>
                   )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {payments.length === 0 && <p className="px-4 py-10 text-center text-sm text-ink/50">No payments found.</p>}
+        {payments.length === 0 && <p className="px-4 py-10 text-center text-sm text-ink/70">No payments found.</p>}
       </div>
+      <Pager page={page} pages={Math.ceil(total / PER_PAGE)} basePath="/admin/payments" params={sp} />
     </div>
   );
 }

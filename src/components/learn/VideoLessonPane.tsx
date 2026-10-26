@@ -1,86 +1,111 @@
 "use client";
 
 import { useCallback, useRef } from "react";
-import VideoPlayer from "@/components/VideoPlayer";
-import NotesPanel from "./NotesPanel";
+import { useRouter } from "next/navigation";
+import LessonVideo from "@/components/LessonVideo";
+import type { VideoPlayerHandle } from "@/components/VideoPlayer";
+import NotesPanel, { type NoteItem } from "./NotesPanel";
 import LessonFooter from "./LessonFooter";
-import { updateLessonPositionAction, markLessonCompleteAction } from "@/lib/actions/learn";
+import AttachmentList from "./AttachmentList";
+import { savePositionAction, setLessonCompleteAction, refreshLessonAction } from "@/lib/actions/learn";
+import { track } from "@/lib/analytics";
+import type { LessonBody } from "@/lib/lesson-access";
 
-type ResourceLink = { label: string; url: string };
+type VideoBody = Extract<LessonBody, { kind: "video" }>;
 
 export default function VideoLessonPane({
   slug,
   lessonId,
   title,
-  videoUrl,
-  captionUrl,
+  body,
   initialPositionSeconds,
   completed,
   prevId,
   nextId,
+  nextLocked,
   noteContent,
   timestampedNotes,
-  resources,
+  canTrack,
 }: {
   slug: string;
   lessonId: string;
   title: string;
-  videoUrl: string;
-  captionUrl?: string;
+  body: VideoBody;
   initialPositionSeconds: number;
   completed: boolean;
   prevId?: string;
   nextId?: string;
+  nextLocked?: boolean;
   noteContent: string;
-  timestampedNotes: { id: string; content: string; videoTimestampSeconds: number | null; createdAt: string }[];
-  resources: ResourceLink[];
+  timestampedNotes: NoteItem[];
+  /** False for admins without an enrollment: they can watch but nothing is recorded. */
+  canTrack: boolean;
 }) {
-  const timeRef = useRef(initialPositionSeconds);
+  const router = useRouter();
+  const player = useRef<VideoPlayerHandle>(null);
+  const started = useRef(false);
 
   const onProgress = useCallback(
-    (seconds: number) => {
-      timeRef.current = seconds;
-      updateLessonPositionAction(slug, lessonId, seconds);
+    async (seconds: number) => {
+      if (!canTrack) return;
+      const res = await savePositionAction(lessonId, seconds);
+      if (res.ok && res.completed) router.refresh(); // auto-completed at >= 90%
     },
-    [slug, lessonId]
+    [lessonId, canTrack, router]
   );
 
-  const onEnded = useCallback(() => {
-    markLessonCompleteAction(slug, lessonId);
-  }, [slug, lessonId]);
+  const onEnded = useCallback(async () => {
+    if (!canTrack || completed) return;
+    await setLessonCompleteAction(lessonId, true);
+    router.refresh();
+  }, [lessonId, canTrack, completed, router]);
+
+  const onPlay = useCallback(() => {
+    if (!started.current) {
+      started.current = true;
+      track("lesson_started", { lessonId });
+    }
+  }, [lessonId]);
+
+  // Signed URLs expire; fetch a fresh one when the browser reports a load error.
+  const onSrcError = useCallback(async () => {
+    const view = await refreshLessonAction(lessonId);
+    return view.ok && view.body.kind === "video" ? view.body.src : null;
+  }, [lessonId]);
 
   return (
     <div className="space-y-6">
       <h1 className="font-serif text-2xl text-teal-900">{title}</h1>
-      <VideoPlayer
-        src={videoUrl}
-        captionUrl={captionUrl}
+      <LessonVideo
+        ref={player}
+        source={body.source}
+        src={body.src}
         title={title}
+        captions={body.captions}
         initialPositionSeconds={initialPositionSeconds}
         onProgress={onProgress}
         onEnded={onEnded}
+        onPlay={onPlay}
+        onSrcError={onSrcError}
       />
-      {resources.length > 0 && (
-        <div className="rounded-2xl border border-teal-100 bg-white p-5">
-          <h3 className="font-serif text-lg text-teal-900">Resources</h3>
-          <ul className="mt-3 space-y-2">
-            {resources.map((r) => (
-              <li key={r.url}>
-                <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-teal-700 hover:underline">
-                  📎 {r.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
+      {body.transcript && (
+        <details className="rounded-2xl border border-teal-100 bg-white p-5">
+          <summary className="cursor-pointer font-serif text-lg text-teal-900">Transcript</summary>
+          <p className="mt-3 whitespace-pre-line text-sm text-ink/80">{body.transcript}</p>
+        </details>
       )}
-      <NotesPanel
-        lessonId={lessonId}
-        initialContent={noteContent}
-        timestampedNotes={timestampedNotes}
-        getVideoTime={() => timeRef.current}
-      />
-      <LessonFooter slug={slug} lessonId={lessonId} completed={completed} prevId={prevId} nextId={nextId} />
+      <AttachmentList items={body.attachments} />
+      {canTrack && (
+        <NotesPanel
+          lessonId={lessonId}
+          initialContent={noteContent}
+          timestampedNotes={timestampedNotes}
+          getVideoTime={body.source === "file" ? () => player.current?.getTime() ?? 0 : undefined}
+          onSeek={(s) => player.current?.seekTo(s)}
+          courseNotesHref={`/learn/${slug}/notes`}
+        />
+      )}
+      <LessonFooter slug={slug} lessonId={lessonId} completed={completed} prevId={prevId} nextId={nextId} nextLocked={nextLocked} hideMarkComplete={!canTrack} />
     </div>
   );
 }
